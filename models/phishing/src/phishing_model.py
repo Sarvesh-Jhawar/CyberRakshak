@@ -121,35 +121,26 @@ def extract_combined_features(row):
 # Prepare dataset
 # -----------------------------------------------------
 
-# Ensure 'label' column exists
-if 'label' not in data.columns:
-    raise ValueError("Dataset must have a 'label' column (1=phishing, 0=safe)")
-
-# Drop rows with missing labels
-data = data.dropna(subset=['label'])
-data['label'] = data['label'].astype(int)
-
 # --- UNIFY URLS to match API ---
-# Create a single 'url' column from the separate ones.
-# Note: The dataset has 'PHISING URL ' (typo with one 'H' and trailing space)
 phishing_col = next((c for c in data.columns if 'PHIS' in c.upper() and 'URL' in c.upper()), None)
 safe_col = next((c for c in data.columns if 'SAFE' in c.upper() and 'URL' in c.upper()), None)
 
+phish_urls = []
+safe_urls = []
 if phishing_col:
-    # Use fillna if safe_col exists, otherwise just the phishing column
-    if safe_col:
-        data['url'] = data[phishing_col].fillna(data[safe_col])
-    else:
-        data['url'] = data[phishing_col]
-elif safe_col:
-    data['url'] = data[safe_col]
-else:
-    raise ValueError("Could not find a URL column in the dataset")
+    phish_urls = data[phishing_col].dropna().tolist()
+if safe_col:
+    safe_urls = data[safe_col].dropna().tolist()
 
-# Now we can drop the old columns and any rows that still don't have a url
-cols_to_drop = [c for c in [phishing_col, safe_col] if c is not None]
-data = data.drop(columns=cols_to_drop, errors='ignore')
-data = data.dropna(subset=['url'])
+if not phish_urls and not safe_urls:
+    raise ValueError("Could not find any URLs in the dataset")
+
+data = pd.DataFrame({
+    'url': phish_urls + safe_urls,
+    'label': [1] * len(phish_urls) + [0] * len(safe_urls),
+    'subject': [''] * (len(phish_urls) + len(safe_urls)),
+    'body': [''] * (len(phish_urls) + len(safe_urls))
+})
 
 
 # Apply feature extraction
@@ -182,8 +173,8 @@ X_train, X_test, y_train, y_test = train_test_split(
 # Train Random Forest
 # -----------------------------------------------------
 model = RandomForestClassifier(
-    n_estimators=150, max_depth=8, random_state=42, n_jobs=-1,
-    class_weight='balanced', min_samples_leaf=5, min_samples_split=10
+    n_estimators=150, max_depth=12, random_state=42, n_jobs=-1,
+    class_weight='balanced', min_samples_leaf=2
 )
 model.fit(X_train, y_train)
 
@@ -196,7 +187,13 @@ if probs.shape[1] == 1:
 print("\nClassification Report:")
 report = classification_report(y_test, preds, output_dict=True)
 print(classification_report(y_test, preds))
+
+train_accuracy = accuracy_score(y_train, model.predict(X_train))
 accuracy = accuracy_score(y_test, preds)
+roc_auc = roc_auc_score(y_test, probs[:, 1])
+
+print(f"Train Accuracy: {round(train_accuracy, 4)}")
+print(f"Test Accuracy: {round(accuracy, 4)}")
 roc_auc = roc_auc_score(y_test, probs[:, 1])
 print("Accuracy:", round(accuracy, 4))
 print("ROC-AUC:", round(roc_auc, 4))

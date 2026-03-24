@@ -6,6 +6,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix, accuracy_score
+from sklearn.feature_selection import SelectKBest, f_classif
 import joblib
 import json
 from pathlib import Path
@@ -101,6 +102,7 @@ print("Classes in training data:", np.unique(y_train))
 # -----------------------------------------------------
 model = Pipeline(steps=[
     ('preprocessor', preprocessor),
+    ('feature_selection', SelectKBest(f_classif, k=30)),
     ('classifier', RandomForestClassifier(
         n_estimators=50, max_depth=5, random_state=42, n_jobs=-1, 
         class_weight='balanced', min_samples_leaf=5, min_samples_split=10
@@ -123,8 +125,11 @@ report = classification_report(y_test, preds, output_dict=True)
 print(classification_report(y_test, preds))
 print("--- Confusion Matrix ---")
 print(confusion_matrix(y_test, preds))
+
+train_accuracy = accuracy_score(y_train, model.predict(X_train))
 accuracy = accuracy_score(y_test, preds)
-print("Accuracy:", round(accuracy, 4))
+print(f"Train Accuracy: {round(train_accuracy, 4)}")
+print(f"Test Accuracy: {round(accuracy, 4)}")
 try:
     if len(np.unique(y_test)) > 1:
         roc = roc_auc_score(y_test, malware_probs)
