@@ -11,8 +11,8 @@ Welcome to the **CyberRakshak** AI subsystem. This directory hosts the five prim
 | 🌐 **Networking** | Pipeline + Random Forest | OneHotEncoding, Feature Scaling, Tree Pruning | **99.38%** |
 | 🦠 **Malware** | Random Forest | Max Depth Constraint, Balanced Weights | **97.50%** |
 | 🎣 **Phishing** | Random Forest | Heuristic Feature Extraction | **99.86%** |
-| 🕵️ **Zero-Day** | Pipeline + Logistic Regression | Categorical Imputation, Leakage Prevention | **100.0%** |
-| 🗄️ **Ransomware** | Pipeline + Feature Selection | ANOVA K-Best (k=30), Random Forest | **100.0%** |
+| 🕵️ **Zero-Day** | Pipeline + Logistic Regression | Categorical Imputation, Leakage Prevention | **71.81%** |
+| 🗄️ **Ransomware** | Pipeline + Feature Selection | ANOVA K-Best (k=15), Random Forest | **100.0%** |
 
 ---
 
@@ -53,18 +53,20 @@ Welcome to the **CyberRakshak** AI subsystem. This directory hosts the five prim
 - **Algorithm Used:** `LogisticRegression` (Pipeline)
 - **Why this model?** Zero-day exploits inherently break prior patterns. By leveraging Logistic Regression, we enforce a highly interpretable, linear mapping of core packet metrics that avoids the hyper-memorization of decision trees.
 - **Techniques Applied:**
-  - Advanced data-leakage suppression: explicitly banning identifying traits (`session id`, `ip address`) ensuring the model judges purely on behavioral payload mathematics (`netflow bytes`, `port`).
+  - Advanced data-leakage suppression: explicitly banned identifying traits (`session id`, `ip address`) and implicit label leakers (`family`, `port`, `clusters`) ensuring the model judges purely on behavioral payload mathematics (`netflow bytes`, `payload size`).
   - Pipeline integration utilizing `SimpleImputer` natively supports robust real-world incomplete data streams.
+  - Hyperparameter tuning set `C=1.0` to relieve L2 regularization penalties, providing balanced model fitting.
 - **Confidence Metrics:** 
-  - **Accuracy:** 100.0% | **Macro F1:** 100.0%
+  - **Accuracy:** 71.81% | **Macro F1:** 0.4180
 
 ### 5. 🗄️ Ransomware Behavioral Model (`ransomware_rf_model.pkl`)
 - **Dataset:** Massive arrays tracking intense operating system behavior including registry modifications, DNS requests, and DLL executions.
 - **Algorithm Used:** `SelectKBest` + `RandomForestClassifier` (Pipeline)
 - **Why this model?** Ransomware execution leaves blazing trails in localized OS APIs. The architecture uses ANOVA scoring to extract those specific flare patterns, ignoring ambient noise.
 - **Techniques Applied:**
-  - **Automated Feature Reduction:** Funnels 90 raw metrics through a statistical filter (`SelectKBest: k=30`), forcing the model to only "see" the 30 most highly correlated threat metrics. 
-  - Limits tree structures with `max_depth=5` and class balancing for rapid inference on endpoint agents.
+  - **Automated Feature Reduction:** Funnels native metrics through a brutal statistical filter (`SelectKBest: k=15`), forcing the model to only "see" the 15 most highly correlated threat metrics out of initial 85+. 
+  - **Label Scrubbing:** Dynamically dropped dataset features containing strings like `malicious` or `suspicious` to kill raw label leakage.
+  - Limits tree structures with `max_depth=3` and class balancing for rapid inference on endpoint agents.
 - **Confidence Metrics:** 
   - **Accuracy:** 100.0% | **Macro F1:** 100.0%
 
