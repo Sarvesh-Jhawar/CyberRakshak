@@ -19,6 +19,91 @@ Instead of requiring security teams to manually parse malicious files, URLs, or 
 
 CyberRakshak operates on a high-speed, dual-engine "Router-to-Synthesizer" architecture:
 
+```mermaid
+graph TD
+    %% Styling Definitions
+    classDef user fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    classDef router fill:#805ad5,stroke:#e9d8fd,stroke-width:2px,color:#fff
+    classDef ml fill:#2b6cb0,stroke:#63b3ed,stroke-width:2px,color:#fff
+    classDef synth fill:#4c51bf,stroke:#c3dafe,stroke-width:2px,color:#fff
+    classDef output fill:#276749,stroke:#9ae6b4,stroke-width:2px,color:#fff
+
+    subgraph UserInterface["🌐 Frontend Layer"]
+        User["👤 User (Victim/Analyst)"]
+        Chatbot["💬 Chatbot Interface"]
+        Input["📝 Input (Logs, URL, Issue Desc.)"]
+    end
+
+    subgraph BackendAPI["⚙️ Backend Logic & Routing"]
+        API["🔌 Backend Controller (FastAPI/Node)"]
+        LLM_Router["🧠 Initial LLM Router<br>(Categorizes Intent)"]
+    end
+
+    subgraph MLSubsystem["🛡️ Specialized ML Subsystem"]
+        M1["🌐 Networking Model<br>(RF + Precision Pruning)"]
+        M2["🗄️ Ransomware Model<br>(SelectKBest ANOVA + RF)"]
+        M3["🎣 Phishing Engine<br>(Feature Extraction + RF)"]
+        M4["🦠 Malware Analyser<br>(PE Structure RF)"]
+        M5["🕵️ Zero-Day Predictor<br>(Logistic Regression)"]
+    end
+
+    subgraph AnalysisLayer["🔬 Dual-Engine Analysis Phase"]
+        LLM_Context["🧠 LLM Contextual Analysis<br>(Heuristics & Threat Intel)"]
+        ML_Score["📊 Hard Mathematical Score<br>& Confidence Array"]
+    end
+    
+    subgraph FinalReporting["📤 Final Synthesis Layer"]
+        Synthesizer["⚡ Dual-Engine Synthesizer<br>(LLM Generates Final Report)"]
+        Verdict["🔎 Final Threat Verdict & ML Stats"]
+        Mitigation["🛠️ Quarantine/Preventative Steps"]
+        Reporting["📞 Official Complaint Protocol"]
+    end
+
+    %% Wiring User Input
+    User --> Chatbot
+    Chatbot --> Input
+    Input --> API
+    API --> LLM_Router
+    
+    %% Routing to Specialized ML Models
+    LLM_Router -- "Detects Network Traffic" --> M1
+    LLM_Router -- "Detects OS/Registry Anomaly" --> M2
+    LLM_Router -- "Detects Suspicious URL" --> M3
+    LLM_Router -- "Detects Suspicious File/PE" --> M4
+    LLM_Router -- "Detects Unknown Payload" --> M5
+    
+    %% Simultaneous LLM Path
+    LLM_Router -- "Parallel Processing" --> LLM_Context
+    
+    %% Aggregating ML Scores
+    M1 --> ML_Score
+    M2 --> ML_Score
+    M3 --> ML_Score
+    M4 --> ML_Score
+    M5 --> ML_Score
+    
+    %% Synthesis & Report Generation
+    ML_Score --> Synthesizer
+    LLM_Context --> Synthesizer
+    
+    Synthesizer --> Verdict
+    Synthesizer --> Mitigation
+    Synthesizer --> Reporting
+    
+    %% Loop back to user
+    Verdict -.-> Chatbot
+    Mitigation -.-> Chatbot
+    Reporting -.-> Chatbot
+
+    %% Assigning Colors
+    class User,Chatbot,Input user
+    class API,LLM_Router router
+    class M1,M2,M3,M4,M5,ML_Score ml
+    class LLM_Context,Synthesizer synth
+    class Verdict,Mitigation,Reporting output
+```
+
+
 1. **📥 User Input (The Prompt):** The user pastes a suspicious log, URL, malware hash, or describes a cyber incident in the chatbot.
 2. **🔀 LLM Routing Engine:** The core Large Language Model intercepts the prompt and dynamically categorizes the threat vector (e.g., *Is this a phishing attempt? A network breach? Ransomware?*).
 3. **⚡ Dual Execution Phase:**
