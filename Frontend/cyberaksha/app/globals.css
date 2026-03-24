@@ -1,0 +1,192 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Classic light theme (default) */
+  --background: #ffffff; /* White Background */
+  --foreground: #0f1724; /* Dark Slate Text */
+  --card: #f8fafc; /* Light card */
+  --card-foreground: #0f1724;
+  --popover: #ffffff;
+  --popover-foreground: #0f1724;
+  --primary: #0b5cff; /* Classic blue */
+  --primary-foreground: #ffffff;
+  --secondary: #0ea5a9; /* Teal secondary */
+  --secondary-foreground: #ffffff;
+  --muted: #f1f5f9; /* Muted light */
+  --muted-foreground: #6b7280;
+  --accent: #ffb020; /* Warm accent */
+  --accent-foreground: #0f1724;
+  --destructive: #e11d48;
+  --destructive-foreground: #ffffff;
+  --border: #e6edf3;
+  --input: #ffffff;
+  --ring: rgba(11, 92, 255, 0.25);
+  --chart-1: #0b5cff;
+  --chart-2: #0ea5a9;
+  --chart-3: #e11d48;
+  --chart-4: #f8fafc;
+  --chart-5: #8fb8ff;
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f1724;
+  --sidebar-primary: #0b5cff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ffb020;
+  --sidebar-accent-foreground: #0f1724;
+  --sidebar-border: #e6edf3;
+  --sidebar-ring: rgba(11, 92, 255, 0.2);
+}
+
+.dark {
+  /* Dark cyber theme */
+  --background: #001f3f; /* Deep Blue Background */
+  --foreground: #ffffff; /* White Text */
+  --card: #0d1b2a; /* Dark Navy Card Background */
+  --card-foreground: #ffffff; /* White Card Text */
+  --popover: #0d1b2a; /* Dark Navy Popover */
+  --popover-foreground: #ffffff; /* White Popover Text */
+  --primary: #39ff14; /* Neon Green Primary */
+  --primary-foreground: #001f3f; /* Deep Blue Text on Primary */
+  --secondary: #00ffff; /* Neon Cyan Secondary */
+  --secondary-foreground: #001f3f; /* Deep Blue Text on Secondary */
+  --muted: #1a2332; /* Slightly Lighter Navy for Muted */
+  --muted-foreground: #a0a9b8; /* Light Gray for Muted Text */
+  --accent: #39ff14; /* Neon Green Accent */
+  --accent-foreground: #001f3f; /* Deep Blue Text on Accent */
+  --destructive: #e63946; /* Red for Destructive Actions */
+  --destructive-foreground: #ffffff; /* White Text on Destructive */
+  --border: #1d2a3a; /* Dark Border */
+  --input: #0d1b2a; /* Dark Navy Input Background */
+  --ring: rgba(57, 255, 20, 0.5); /* Neon Green Ring */
+  --chart-1: #39ff14; /* Neon Green Chart */
+  --chart-2: #00ffff; /* Neon Cyan Chart */
+  --chart-3: #e63946; /* Red Chart */
+  --chart-4: #f1faee; /* Light Chart */
+  --chart-5: #a8dadc; /* Light Blue Chart */
+  --radius: 0.5rem;
+  --sidebar: #0d1b2a; /* Dark Navy Sidebar */
+  --sidebar-foreground: #ffffff; /* White Sidebar Text */
+  --sidebar-primary: #001f3f; /* Deep Blue Sidebar Primary */
+  --sidebar-primary-foreground: #ffffff; /* White Sidebar Primary Text */
+  --sidebar-accent: #39ff14; /* Neon Green Sidebar Accent */
+  --sidebar-accent-foreground: #001f3f; /* Deep Blue Sidebar Accent Text */
+  --sidebar-border: #1d2a3a; /* Dark Sidebar Border */
+  --sidebar-ring: rgba(57, 255, 20, 0.5); /* Neon Green Sidebar Ring */
+}
+
+.unique {
+  /* Unique theme: warm, professional palette */
+  --background: #f7f5ef; /* Warm ivory */
+  --foreground: #1f2937; /* Slate text */
+  --card: #fffdf8;
+  --card-foreground: #1f2937;
+  --popover: #fffdf8;
+  --popover-foreground: #1f2937;
+  --primary: #9b4dca; /* Warm purple */
+  --primary-foreground: #ffffff;
+  --secondary: #f59e0b; /* Amber */
+  --secondary-foreground: #1f2937;
+  --muted: #fbf7ee;
+  --muted-foreground: #6b7280;
+  --accent: #06b6d4;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #efe6f6;
+  --input: #fffdf8;
+  --ring: rgba(155, 77, 202, 0.15);
+  --chart-1: #9b4dca;
+  --chart-2: #f59e0b;
+  --chart-3: #ef4444;
+  --chart-4: #fffdf8;
+  --chart-5: #c7b2d9;
+  --radius: 0.5rem;
+  --sidebar: #fffdf8;
+  --sidebar-foreground: #1f2937;
+  --sidebar-primary: #9b4dca;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #06b6d4;
+  --sidebar-accent-foreground: #1f2937;
+  --sidebar-border: #efe6f6;
+  --sidebar-ring: rgba(155, 77, 202, 0.12);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Added cybersecurity-specific utility classes */
+@layer utilities {
+  .cyber-glow {
+    box-shadow: 0 0 10px rgba(57, 255, 20, 0.3);
+  }
+
+  .cyber-border {
+    border: 1px solid rgba(57, 255, 20, 0.5);
+  }
+
+  .risk-low {
+    color: #39ff14;
+  }
+
+  .risk-medium {
+    color: #ffd700;
+  }
+
+  .risk-high {
+    color: #ff8c00;
+  }
+
+  .risk-critical {
+    color: #e63946;
+  }
+}
