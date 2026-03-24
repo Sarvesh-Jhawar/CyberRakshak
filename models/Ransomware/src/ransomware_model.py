@@ -45,10 +45,14 @@ data.columns = [col.strip() for col in data.columns]
 data = data.loc[:, ~data.columns.str.contains('^Unnamed')]
 
 # -----------------------------------------------------
-# Drop identifiers
+# Drop identifiers & Label Leakage
 # -----------------------------------------------------
 identifiers = ["FileName", "md5Hash", "sha1"]
 data = data.drop(columns=[col for col in identifiers if col in data.columns])
+
+leakage_indicators = ['malicious', 'suspicious', 'threat']
+leak_cols = [col for col in data.columns if any(leak in col.lower() for leak in leakage_indicators)]
+data = data.drop(columns=leak_cols)
 
 # -----------------------------------------------------
 # Target column
@@ -102,9 +106,9 @@ print("Classes in training data:", np.unique(y_train))
 # -----------------------------------------------------
 model = Pipeline(steps=[
     ('preprocessor', preprocessor),
-    ('feature_selection', SelectKBest(f_classif, k=30)),
+    ('feature_selection', SelectKBest(f_classif, k=15)),
     ('classifier', RandomForestClassifier(
-        n_estimators=50, max_depth=5, random_state=42, n_jobs=-1, 
+        n_estimators=50, max_depth=3, random_state=42, n_jobs=-1, 
         class_weight='balanced', min_samples_leaf=5, min_samples_split=10
     ))
 ])

@@ -47,7 +47,7 @@ data = data[data[target].isin(valid_classes)]
 # 4️⃣ Separate features and target
 # -------------------------------------------------------------------
 # Drop expected leakage features immediately
-leakage_cols = ['prediction', 'session id', 'ip address', 'user-agent', 'logistics id', 'seddaddress', 'expaddress', 'event description', 'timestamp', 'time', 'anomaly score', 'error code', 'application layer data', 'geolocation']
+leakage_cols = ['prediction', 'session id', 'ip address', 'user-agent', 'logistics id', 'seddaddress', 'expaddress', 'event description', 'timestamp', 'time', 'anomaly score', 'error code', 'application layer data', 'geolocation', 'family', 'port', 'clusters']
 X = data.drop(columns=[target] + [c for c in leakage_cols if c in data.columns], errors='ignore')
 y = data[target]
 
@@ -96,7 +96,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 # -------------------------------------------------------------------
 clf = Pipeline(steps=[
     ("preprocessor", preprocessor),
-    ("classifier", LogisticRegression(max_iter=1000, solver="lbfgs", C=0.01))
+    ("classifier", LogisticRegression(max_iter=1000, solver="lbfgs", C=1.0))
 ])
 
 # -------------------------------------------------------------------
