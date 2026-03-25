@@ -15,8 +15,7 @@ import {
 } from "@/components/ui/accordion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { History, Search, Filter, AlertTriangle, CheckCircle, Clock, XCircle, Loader2, MessageSquare } from "lucide-react"
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000"
+import { api } from "@/lib/api"
 
 export default function StatusPage() {
   const [complaints, setComplaints] = useState<any[]>([])
@@ -30,7 +29,7 @@ export default function StatusPage() {
     const fetchComplaints = async () => {
       setLoading(true)
       try {
-        const res = await fetch(`${API_BASE}/api/v1/incidents`, {
+        const res = await fetch(api.incidents.list, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -43,7 +42,7 @@ export default function StatusPage() {
         // Fetch full details for each incident to get comments
         const detailedComplaints = await Promise.all(
           data.map(async (complaint) => {
-            const detailRes = await fetch(`${API_BASE}/api/v1/incidents/${complaint.id}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+            const detailRes = await fetch(api.incidents.detail(complaint.id), { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
             return detailRes.ok ? detailRes.json() : complaint
           })
         )

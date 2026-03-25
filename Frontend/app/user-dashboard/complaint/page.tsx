@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertTriangle, Upload, CheckCircle, FileText, ImageIcon, Video, Mic } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { api } from "@/lib/api"
 
 export default function ComplaintPage() {
   const searchParams = useSearchParams();
@@ -83,7 +84,7 @@ export default function ComplaintPage() {
       }
 
       // Submit to backend
-      const response = await fetch("http://127.0.0.1:8000/api/v1/incidents", {
+      const response = await fetch(api.incidents.list, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${localStorage.getItem("token")}`

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { mockLogin, isMockAuthEnabled } from "@/lib/mockAuth"
+import { api } from "@/lib/api"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -30,7 +31,7 @@ export default function LoginPage() {
         data = await mockLogin(formData)
         console.log("[Login] mockLogin returned", data)
       } else {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/auth/login", {
+        const res = await fetch(api.auth.login, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),

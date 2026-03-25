@@ -19,6 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AlertTriangle, Search, MessageSquare, Clock, User, FileText, ExternalLink } from "lucide-react"
+import { api } from "@/lib/api"
 
 // ✅ Later we’ll replace this with actual FastAPI endpoint
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000"
@@ -39,7 +40,7 @@ export default function IncidentsPage() {
   useEffect(() => {
     const fetchIncidents = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/v1/incidents`, {
+        const res = await fetch(api.incidents.list, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
@@ -67,7 +68,7 @@ export default function IncidentsPage() {
     setIsDetailLoading(true)
     setSelectedIncident(incident) // Show basic info immediately
     try {
-      const res = await fetch(`${API_BASE}/api/v1/incidents/${incident.id}`, {
+      const res = await fetch(api.incidents.detail(incident.id), {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
@@ -86,7 +87,7 @@ export default function IncidentsPage() {
   const handleUpdateStatus = async (newStatus: string | null) => {
     if (!newStatus || !selectedIncident) return
     try {
-      const res = await fetch(`${API_BASE}/api/v1/incidents/${selectedIncident.id}`, {
+      const res = await fetch(api.incidents.detail(selectedIncident.id), {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -108,7 +109,7 @@ export default function IncidentsPage() {
     if (!newComment.trim() || !selectedIncident) return
     setIsSubmitting(true)
     try {
-      await fetch(`${API_BASE}/api/v1/incidents/${selectedIncident.id}/comments`, {
+      await fetch(api.incidents.comments(selectedIncident.id), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
         body: JSON.stringify({ text: newComment }),
@@ -128,7 +129,7 @@ export default function IncidentsPage() {
   }
 
   const fetchIncidentDetails = async (id: string) => {
-    const res = await fetch(`${API_BASE}/api/v1/incidents/${id}`, {
+    const res = await fetch(api.incidents.detail(id), {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("token")}`,
       },

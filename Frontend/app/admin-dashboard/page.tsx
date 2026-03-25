@@ -17,6 +17,7 @@ import {
   Cell,
 } from "recharts"
 import { AlertTriangle, Users, TrendingUp, Clock } from "lucide-react"
+import { api } from "@/lib/api"
 
 export default function AdminDashboard() {
   // State for different datasets
@@ -30,19 +31,19 @@ export default function AdminDashboard() {
     async function fetchData() {
       try {
         const [statsRes, incidentsRes, riskRes, priorityRes, heatmapRes] = await Promise.all([
-          fetch("http://127.0.0.1:8000/api/v1/admin/dashboard/stats", {
+          fetch(api.admin.dashboardStats, {
             headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
           }),
-          fetch("http://127.0.0.1:8000/api/v1/admin/incidents/trends", {
+          fetch(api.admin.incidentsTrends, {
             headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
           }),
-          fetch("http://127.0.0.1:8000/api/v1/admin/incidents/risk", {
+          fetch(api.admin.incidentsRisk, {
             headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
           }),
-          fetch("http://127.0.0.1:8000/api/v1/admin/incidents/priority", {
+          fetch(api.admin.incidentsPriority, {
             headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
           }),
-          fetch("http://127.0.0.1:8000/api/v1/admin/incidents/heatmap", {
+          fetch(api.admin.incidentsHeatmap, {
             headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
           }),
         ])

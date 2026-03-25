@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { api } from "@/lib/api"
 
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -41,7 +42,7 @@ export default function SignupPage() {
         clearance_level: "" // Optional field
       }
 
-      const res = await fetch("http://127.0.0.1:8000/api/v1/auth/register", {
+      const res = await fetch(api.auth.register, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(registrationData),
