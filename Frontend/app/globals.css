@@ -1,0 +1,156 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Professional white theme - clean and modern */
+  --background: #ffffff; /* Pure White Background */
+  --foreground: #0f172a; /* Dark Slate Text */
+  --card: #ffffff; /* White Card Background */
+  --card-foreground: #0f172a; /* Dark Slate Card Text */
+  --popover: #ffffff; /* White Popover */
+  --popover-foreground: #0f172a; /* Dark Slate Popover Text */
+  --primary: #1e40af; /* Professional Blue Primary */
+  --primary-foreground: #ffffff; /* White Text on Primary */
+  --secondary: #f1f5f9; /* Light Gray Secondary */
+  --secondary-foreground: #0f172a; /* Dark Slate Text on Secondary */
+  --muted: #f8fafc; /* Very Light Gray for Muted */
+  --muted-foreground: #64748b; /* Medium Gray for Muted Text */
+  --accent: #3b82f6; /* Bright Blue Accent */
+  --accent-foreground: #ffffff; /* White Text on Accent */
+  --destructive: #dc2626; /* Professional Red for Destructive Actions */
+  --destructive-foreground: #ffffff; /* White Text on Destructive */
+  --border: #e2e8f0; /* Light Gray Border */
+  --input: #ffffff; /* White Input Background */
+  --ring: rgba(30, 64, 175, 0.2); /* Subtle Blue Ring */
+  --chart-1: #3b82f6; /* Blue Chart */
+  --chart-2: #10b981; /* Green Chart */
+  --chart-3: #f59e0b; /* Amber Chart */
+  --chart-4: #ef4444; /* Red Chart */
+  --chart-5: #8b5cf6; /* Purple Chart */
+  --radius: 0.5rem;
+  --sidebar: #ffffff; /* White Sidebar */
+  --sidebar-foreground: #0f172a; /* Dark Slate Sidebar Text */
+  --sidebar-primary: #1e40af; /* Professional Blue Sidebar Primary */
+  --sidebar-primary-foreground: #ffffff; /* White Sidebar Primary Text */
+  --sidebar-accent: #f1f5f9; /* Light Gray Sidebar Accent */
+  --sidebar-accent-foreground: #0f172a; /* Dark Slate Sidebar Accent Text */
+  --sidebar-border: #e2e8f0; /* Light Gray Sidebar Border */
+  --sidebar-ring: rgba(30, 64, 175, 0.2); /* Subtle Blue Sidebar Ring */
+}
+
+.dark {
+  /* Dark mode theme - ready for future theme toggle */
+  --background: #0f172a; /* Dark Slate Background */
+  --foreground: #f8fafc; /* Light Gray Text */
+  --card: #1e293b; /* Dark Slate Card Background */
+  --card-foreground: #f8fafc; /* Light Gray Card Text */
+  --popover: #1e293b; /* Dark Slate Popover */
+  --popover-foreground: #f8fafc; /* Light Gray Popover Text */
+  --primary: #3b82f6; /* Bright Blue Primary */
+  --primary-foreground: #ffffff; /* White Text on Primary */
+  --secondary: #334155; /* Medium Slate Secondary */
+  --secondary-foreground: #f8fafc; /* Light Gray Text on Secondary */
+  --muted: #1e293b; /* Dark Slate for Muted */
+  --muted-foreground: #94a3b8; /* Medium Gray for Muted Text */
+  --accent: #3b82f6; /* Bright Blue Accent */
+  --accent-foreground: #ffffff; /* White Text on Accent */
+  --destructive: #ef4444; /* Red for Destructive Actions */
+  --destructive-foreground: #ffffff; /* White Text on Destructive */
+  --border: #334155; /* Medium Slate Border */
+  --input: #1e293b; /* Dark Slate Input Background */
+  --ring: rgba(59, 130, 246, 0.5); /* Blue Ring */
+  --chart-1: #3b82f6; /* Blue Chart */
+  --chart-2: #10b981; /* Green Chart */
+  --chart-3: #f59e0b; /* Amber Chart */
+  --chart-4: #ef4444; /* Red Chart */
+  --chart-5: #8b5cf6; /* Purple Chart */
+  --sidebar: #1e293b; /* Dark Slate Sidebar */
+  --sidebar-foreground: #f8fafc; /* Light Gray Sidebar Text */
+  --sidebar-primary: #3b82f6; /* Bright Blue Sidebar Primary */
+  --sidebar-primary-foreground: #ffffff; /* White Sidebar Primary Text */
+  --sidebar-accent: #334155; /* Medium Slate Sidebar Accent */
+  --sidebar-accent-foreground: #f8fafc; /* Light Gray Sidebar Accent Text */
+  --sidebar-border: #334155; /* Medium Slate Sidebar Border */
+  --sidebar-ring: rgba(59, 130, 246, 0.5); /* Blue Sidebar Ring */
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Professional utility classes */
+@layer utilities {
+  .cyber-glow {
+    /* Subtle professional shadow instead of neon glow */
+    box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1);
+  }
+
+  .cyber-border {
+    /* Professional subtle border */
+    border: 1px solid var(--border);
+  }
+
+  .risk-low {
+    color: #10b981; /* Green for low risk */
+  }
+
+  .risk-medium {
+    color: #f59e0b; /* Amber for medium risk */
+  }
+
+  .risk-high {
+    color: #f97316; /* Orange for high risk */
+  }
+
+  .risk-critical {
+    color: #dc2626; /* Red for critical risk */
+  }
+}
