@@ -6,10 +6,12 @@ export const api = {
     auth: {
         login: `${API_BASE_URL}/api/v1/auth/login`,
         register: `${API_BASE_URL}/api/v1/auth/register`,
-        me: `${API_BASE_URL}/api/user/profile`,
+        me: `${API_BASE_URL}/api/v1/auth/me`,
+        logout: `${API_BASE_URL}/api/v1/auth/logout`,
     },
     incidents: {
         list: `${API_BASE_URL}/api/v1/incidents`,
+        create: `${API_BASE_URL}/api/v1/incidents/`,
         detail: (id: string | number) => `${API_BASE_URL}/api/v1/incidents/${id}`,
         comments: (id: string | number) => `${API_BASE_URL}/api/v1/incidents/${id}/comments`,
     },
@@ -24,7 +26,7 @@ export const api = {
         incidentsPriority: `${API_BASE_URL}/api/v1/admin/incidents/priority`,
         incidentsHeatmap: `${API_BASE_URL}/api/v1/admin/incidents/heatmap`,
         profile: `${API_BASE_URL}/api/v1/admin/profile`,
-        changePassword: `${API_BASE_URL}/api/v1/admin/change-password`,
+        changePassword: `${API_BASE_URL}/api/v1/admin/profile/change-password`,
         actions: `${API_BASE_URL}/api/v1/admin/actions`,
         summary: `${API_BASE_URL}/api/v1/admin/summary`,
         users: `${API_BASE_URL}/api/v1/admin/users`,
@@ -42,7 +44,7 @@ export const api = {
     }
 };
 
-export const getAuthHeaders = () => {
+export const getAuthHeaders = (): Record<string, string> => {
     if (typeof window !== 'undefined') {
         const token = localStorage.getItem("token");
         if (token) {

@@ -14,26 +14,29 @@ load_dotenv()
 router = APIRouter(tags=["LLM"])
 
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    raise ValueError("GROQ_API_KEY environment variable is required")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 class ChatMessageHistory(BaseModel):
     role: str
     content: str
 
-async def call_mistral_api(messages: List[Dict], timeout: float = 60.0) -> Dict:
+async def call_groq_api(messages: List[Dict], timeout: float = 60.0) -> Dict:
     headers = {
-        "Authorization": f"Bearer {MISTRAL_API_KEY}",
+        "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "mistral-large-latest",
+        "model": "llama-3.1-8b-instant",
         "messages": messages,
         "response_format": {"type": "json_object"}
     }
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(MISTRAL_URL, headers=headers, json=payload)
+            response = await client.post(GROQ_URL, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
 
@@ -47,10 +50,10 @@ async def call_mistral_api(messages: List[Dict], timeout: float = 60.0) -> Dict:
                     return {"intent": "general_question", "answer": message_content}
 
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="Mistral AI response missing content.")
+                            detail="Groq AI response missing content.")
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code,
-                            detail=f"Mistral AI request failed: {e.response.text}")
+                            detail=f"Groq AI request failed: {e.response.text}")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Unexpected error: {str(e)}")
@@ -66,53 +69,65 @@ async def analyze_input(
     Handles a single chat turn. Keeps conversation only in memory/localStorage.
     """
     system_prompt = '''
-    You are Sudarshan Chakra, an intelligent cybersecurity assistant.
-    - Classify messages as either "analyze_threat", "general_question", or "complaint_filing".
-    - For "general_question": return {"intent":"general_question","answer":"..."}.
-    - For "analyze_threat": return a JSON object with the following structure: { "intent": "analyze_threat", "detection_summary": "...", "user_alert": "...", "playbook": ["...", "..."], "evidence_to_collect": ["...", "..."], "severity": "...", "cert_alert": "...", "technical_details": { "indicators": ["...", "..."], "analysis": "..." }, "ui_labels": { "category": "...", "status": "...", "recommended_action": "..." } }.
-    - For "complaint_filing":
-        - The goal is to collect the following information for a complaint: "title", "category", "description", "evidenceType", "evidenceText", "evidenceUrl".
-        - **Crucially, you must proactively extract and infer all possible complaint fields from the user's current input and the entire conversation history.** Do not ask for information if it can be extracted, inferred, or reasonably generated.
-        - Maintain a `complaint_data` object in the state to store collected information.
-        - When the user's current input is "ACTION:START_COMPLAINT" or a clear complaint is initiated, immediately attempt to fill all fields.
-        - **Extraction and Inference Guidelines:**
-            - **Title:** If not explicitly provided, infer a concise title from the initial complaint (e.g., "Spam SMS Received", "Suspicious Email").
-            - **Category:** If not explicitly provided, infer from keywords. If "spam sms", "phishing email", "suspicious link", categorize as "phishing". If "virus", "malware", categorize as "malware". **Always return the category in lowercase.**
-            - **Description:** If not explicitly provided, generate a brief, generic description based on the inferred category and title (e.g., "Received an unsolicited SMS message, likely a phishing attempt, containing a suspicious link.").
-            - **Evidence Type:** If not explicitly provided, infer from the context. If "sms" or "text", default to "text". If a link is provided, use "url". If "image", "video", "audio", "file" are mentioned, use those. **Always return the evidenceType in lowercase.**
-            - **Evidence Text:** If "evidenceType" is "text", extract the content of the message or relevant text.
-            - **Evidence URL:** If "evidenceType" is "url", extract the URL.
-        - If all chat-collectable details ("title", "category", "description", "evidenceType", "evidenceText" OR "evidenceUrl") are gathered (either extracted, inferred, or generated), also perform a threat analysis and return a JSON object with the following structure:
-        {
-            "intent": "complaint_ready",
-            "detection_summary": "...",
-            "user_alert": "...",
-            "playbook": ["...", "..."],
-            "evidence_to_collect": ["...", "..."],
-            "severity": "...",
-            "cert_alert": "...",
-            "technical_details": {
-                "indicators": ["...", "..."],
-                "analysis": "..."
-            },
-            "ui_labels": {
-                "category": "...",
-                "status": "...",
-                "recommended_action": "..."
-            },
-            "summary": {
-                "title": "...",
-                "category": "...",
-                "description": "...",
-                "evidenceType": "...",
-                "evidenceText": "...",
-                "evidenceUrl": "..."
-            }
+    You are Sudarshan Chakra, an intelligent cybersecurity assistant for CyberRakshak.
+
+    Classify every user message into one of these intents: "analyze_threat", "general_question", or "complaint_filing".
+
+    --- INTENT: general_question ---
+    Return: {"intent": "general_question", "answer": "..."}
+
+    --- INTENT: analyze_threat ---
+    When the user shares suspicious content (email, SMS, URL, logs, screenshots, malware reports, etc.), perform a full threat analysis AND simultaneously extract complaint filing fields.
+    Return this exact JSON structure:
+    {
+        "intent": "analyze_threat",
+        "detection_summary": "One-sentence summary of the threat",
+        "user_alert": "Immediate action the user should take",
+        "severity": "Low|Medium|High|Critical",
+        "cert_alert": "Official CERT-style alert message",
+        "playbook": ["Step 1", "Step 2", "Step 3"],
+        "evidence_to_collect": ["Evidence item 1", "Evidence item 2"],
+        "technical_details": {
+            "indicators": ["IOC 1", "IOC 2"],
+            "analysis": "Technical explanation"
+        },
+        "ui_labels": {
+            "category": "phishing|malware|fraud|espionage|opsec",
+            "status": "Pending",
+            "recommended_action": "Short action label"
+        },
+        "summary": {
+            "title": "Concise incident title (max 80 chars)",
+            "category": "phishing|malware|fraud|espionage|opsec",
+            "description": "2-3 sentence description suitable for an incident report",
+            "evidenceType": "text|url|image|video|audio|file",
+            "evidenceText": "Extracted text evidence if evidenceType is text, else empty string",
+            "evidenceUrl": "Extracted URL if evidenceType is url, else empty string"
         }
-        Fill in the "..." with the collected and analyzed information.
-        - If not all details are gathered, determine the next *missing* piece of information and ask for it. Prioritize asking for "title", then "category", then "description", then "evidenceType", then "evidenceText" or "evidenceUrl" based on "evidenceType".
-        - Example for asking: {"intent": "ask_complaint_field", "field": "title", "question": "Please provide the Incident Title."}
-    Always return valid JSON.
+    }
+    Rules for summary fields:
+    - category must be one of: phishing, malware, fraud, espionage, opsec
+    - evidenceType must be one of: text, url, image, video, audio, file
+    - If a URL is provided, set evidenceType to "url" and put it in evidenceUrl
+    - If text/SMS/email content is provided, set evidenceType to "text" and put it in evidenceText
+    - Always generate a title and description even if not explicitly stated by the user
+
+    --- INTENT: complaint_filing (only when user explicitly says "file complaint" or "ACTION:START_COMPLAINT") ---
+    Extract all complaint fields from conversation history and return:
+    {
+        "intent": "complaint_ready",
+        "detection_summary": "...", "user_alert": "...", "severity": "...", "cert_alert": "...",
+        "playbook": ["..."], "evidence_to_collect": ["..."],
+        "technical_details": {"indicators": ["..."], "analysis": "..."},
+        "ui_labels": {"category": "...", "status": "Pending", "recommended_action": "..."},
+        "summary": {
+            "title": "...", "category": "phishing|malware|fraud|espionage|opsec",
+            "description": "...", "evidenceType": "text|url|image|video|audio|file",
+            "evidenceText": "...", "evidenceUrl": "..."
+        }
+    }
+
+    Always return valid JSON only. Never return plain text.
     '''
 
     messages_final = [{"role": "system", "content": system_prompt}]
@@ -140,5 +155,5 @@ async def analyze_input(
 
     messages_final.append({"role": "user", "content": user_content})
 
-    # Call Mistral
-    return await call_mistral_api(messages_final)
+    # Call Groq
+    return await call_groq_api(messages_final)

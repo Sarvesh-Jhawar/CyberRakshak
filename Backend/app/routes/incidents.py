@@ -53,8 +53,22 @@ async def create_incident(
         risk_level = get_risk_level(analysis_data)
         
         ml_analysis = None
-        if evidence_text or evidence_url:
-            ml_analysis = ml_manager.analyze_incident(analysis_data)
+        try:
+            if evidence_text or evidence_url:
+                if hasattr(ml_manager, 'analyze_incident'):
+                    ml_analysis = ml_manager.analyze_incident(analysis_data)
+                else:
+                    # Run category-specific analysis as fallback
+                    category_str = str(category.value if hasattr(category, 'value') else category).lower()
+                    if category_str == "phishing" and evidence_url:
+                        from app.utils.ml_models import PhishingInput
+                        ml_analysis = ml_manager.predict_phishing(PhishingInput(url=evidence_url, body=evidence_text or ""))
+                    elif category_str == "malware":
+                        from app.utils.ml_models import MalwareInput
+                        ml_analysis = ml_manager.predict_malware(MalwareInput())
+        except Exception as ml_err:
+            print(f"ML analysis skipped: {ml_err}")
+            ml_analysis = None
 
         incident_model = IncidentSchema(
             id=incident_id,

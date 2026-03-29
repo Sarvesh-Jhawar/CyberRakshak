@@ -103,7 +103,7 @@ export default function ProfilePage() {
       const headers = getAuthHeaders()
       const response = await fetch(api.auth.me, {
         method: "PUT",
-        headers,
+        headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       })
       if (!response.ok) throw new Error("Failed to update profile.")
@@ -242,9 +242,9 @@ export default function ProfilePage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="General public">General public</SelectItem>
-                        <SelectItem value="Organization">Organization</SelectItem>
-                        <SelectItem value="IT professional">IT professional</SelectItem>
+                        <SelectItem value="personnel">Personnel</SelectItem>
+                        <SelectItem value="family">Family Member</SelectItem>
+                        <SelectItem value="veteran">Veteran</SelectItem>
                       </SelectContent>
                     </Select>
                 </div>

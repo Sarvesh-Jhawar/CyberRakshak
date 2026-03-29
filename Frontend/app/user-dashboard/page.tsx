@@ -17,6 +17,8 @@ import {
   Mic,
   Send,
   Paperclip,
+  ClipboardList,
+  ChevronRight,
 } from "lucide-react"
 import Link from "next/link"
 import { api, getAuthHeaders, analyzeWithLlm } from "@/lib/api"
@@ -165,6 +167,10 @@ export default function UserDashboard() {
         question: result.question,
       };
 
+      if (result.intent === 'analyze_threat' && result.summary) {
+        setComplaintData(result.summary);
+      }
+
       if (result.intent === 'complaint_ready') {
         setComplaintData(result.summary);
         setIsFilingComplaint(false);
@@ -304,27 +310,33 @@ export default function UserDashboard() {
                         />
                       )}
                     </div>
-                    {msg.role === 'assistant' && msg.intent === 'analyze_threat' && (
-                      <Button size="sm" className="mt-2 cyber-glow" onClick={startComplaintProcess}>
-                        File Complaint
-                      </Button>
-                    )}
-                    {msg.role === 'assistant' && msg.intent === 'complaint_ready' && (
-                      <div className="mt-4 space-y-2">
-                        {msg.analysis && (
-                          <div>
-                            <h4 className="font-bold text-lg mb-2">Threat Analysis Report</h4>
-                            <div className="p-3 bg-muted/50 rounded-lg space-y-1">
-                              <div><strong>Severity:</strong> <Badge variant={msg.analysis.severity?.toLowerCase() === 'high' ? 'destructive' : 'default'}>{msg.analysis.severity}</Badge></div>
-                              <p><strong>Category:</strong> {msg.analysis.ui_labels?.category}</p>
-                              <p><strong>Summary:</strong> {msg.analysis.detection_summary}</p>
-                              <p className="text-amber-400"><strong>Action:</strong> {msg.analysis.user_alert}</p>
-                            </div>
+                    {/* Threat detected: show rich card + Auto File Complaint button */}
+                    {msg.role === 'assistant' && (msg.intent === 'analyze_threat' || msg.intent === 'complaint_ready') && msg.analysis && (
+                      <div className="mt-3 space-y-3">
+                        {/* Threat Summary Card */}
+                        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">⚠ Threat Detected</span>
+                            <Badge variant={msg.analysis.severity?.toLowerCase() === 'critical' || msg.analysis.severity?.toLowerCase() === 'high' ? 'destructive' : 'default'} className="text-xs">
+                              {msg.analysis.severity || 'Unknown'}
+                            </Badge>
                           </div>
-                        )}
-                        <Button size="sm" className="mt-2 cyber-glow" onClick={handleProceedToComplaint}>
-                          Review and Submit Complaint
+                          <p className="text-xs text-foreground/80"><strong>Category:</strong> {msg.analysis.ui_labels?.category || '—'}</p>
+                          <p className="text-xs text-foreground/80"><strong>Summary:</strong> {msg.analysis.detection_summary}</p>
+                          <p className="text-xs text-amber-300"><strong>Action:</strong> {msg.analysis.user_alert}</p>
+                        </div>
+
+                        {/* Auto File Complaint Button */}
+                        <Button
+                          size="sm"
+                          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-2 cyber-glow"
+                          onClick={handleProceedToComplaint}
+                        >
+                          <ClipboardList className="h-4 w-4" />
+                          🚀 Auto File Complaint
+                          <ChevronRight className="h-4 w-4 ml-auto" />
                         </Button>
+                        <p className="text-xs text-muted-foreground text-center">All fields will be pre-filled — just review and submit</p>
                       </div>
                     )}
                   </div>
@@ -351,7 +363,7 @@ export default function UserDashboard() {
                   placeholder="Describe your cybersecurity issue..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage(message, attachment)}
+                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage(message, attachment ?? undefined)}
                   className="pr-10 bg-white border-slate-300 focus-visible:border-primary focus-visible:ring-primary/20"
                 />
                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -370,7 +382,7 @@ export default function UserDashboard() {
                 </div>
               </div>
               <Button 
-                onClick={() => handleSendMessage(message, attachment)} 
+                onClick={() => handleSendMessage(message, attachment ?? undefined)} 
                 disabled={!message.trim() && !attachment || isAiTyping}
                 className="shrink-0"
               >

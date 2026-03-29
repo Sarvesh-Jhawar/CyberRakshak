@@ -49,6 +49,11 @@ export default function LoginPage() {
       localStorage.setItem("token", data.access_token)
       localStorage.setItem("role", data.role)
 
+      // Also save as cookie so Next.js middleware can protect routes
+      const maxAge = 60 * 60 * 24 // 24 hours
+      document.cookie = `token=${data.access_token}; path=/; max-age=${maxAge}; SameSite=Lax`
+      document.cookie = `role=${data.role}; path=/; max-age=${maxAge}; SameSite=Lax`
+
       // Redirect based on role
       if (data.role === "ADMIN") {
         console.log("[Login] redirecting to admin-dashboard")
@@ -143,9 +148,7 @@ export default function LoginPage() {
               )}
             </form>
 
-            <div className="mt-4 text-xs text-muted-foreground">
-              <p>Test mock accounts: <strong>admin@cyber.local / admin123</strong> or <strong>user@cyber.local / user123</strong></p>
-            </div>
+
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 New user?{" "}

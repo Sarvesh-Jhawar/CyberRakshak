@@ -31,5 +31,5 @@ export async function mockLogin({ email, password }: Credentials) {
 
 export function isMockAuthEnabled() {
   // Toggle mock auth globally by returning true here, or read an env/flag later.
-  return true
+  return false
 }

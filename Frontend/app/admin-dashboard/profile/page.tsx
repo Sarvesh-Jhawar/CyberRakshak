@@ -155,7 +155,7 @@ export default function AdminProfilePage() {
       const headers = getAuthHeaders()
       const response = await fetch(api.admin.profile, {
         method: "PUT",
-        headers,
+        headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       })
       if (!response.ok) throw new Error("Failed to update profile.")
@@ -203,7 +203,7 @@ export default function AdminProfilePage() {
       const headers = getAuthHeaders()
       const response = await fetch(api.admin.changePassword, {
         method: "PUT",
-        headers,
+        headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({
           current_password: passwordData.current_password,
           new_password: passwordData.new_password,

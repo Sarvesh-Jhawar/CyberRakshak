@@ -19,9 +19,9 @@ export default function ComplaintPage() {
     title: searchParams.get("title") || "",
     category: searchParams.get("category") || "",
     description: searchParams.get("description") || "",
-    evidenceType: "",
-    evidenceText: "",
-    evidenceUrl: "",
+    evidenceType: searchParams.get("evidenceType") || "",
+    evidenceText: searchParams.get("evidenceText") || "",
+    evidenceUrl: searchParams.get("evidenceUrl") || "",
   })
   const [file, setFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -84,7 +84,7 @@ export default function ComplaintPage() {
       }
 
       // Submit to backend
-      const response = await fetch(api.incidents.list, {
+      const response = await fetch(api.incidents.create, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${localStorage.getItem("token")}`

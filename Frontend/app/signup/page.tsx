@@ -27,13 +27,19 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!formData.relation) {
+      alert("Please select a Role before submitting.")
+      return
+    }
+
     setIsLoading(true)
 
     try {
       // Map frontend field names to backend expected field names
       const registrationData = {
         name: formData.name,
-        service_id: formData.serviceId,
+        service_id: formData.serviceId || `USR-${Date.now()}`,
         relation: formData.relation,
         email: formData.email,
         phone: formData.phone,
@@ -143,9 +149,9 @@ export default function SignupPage() {
                     <SelectValue placeholder="Select your role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="general">General public</SelectItem>
-                    <SelectItem value="organization">Organization</SelectItem>
-                    <SelectItem value="it">IT professional</SelectItem>
+                    <SelectItem value="personnel">Personnel</SelectItem>
+                    <SelectItem value="family">Family Member</SelectItem>
+                    <SelectItem value="veteran">Veteran</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

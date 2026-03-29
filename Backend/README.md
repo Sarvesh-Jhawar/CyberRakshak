@@ -62,6 +62,9 @@ Key environment variables to configure:
 SECRET_KEY=your-secret-key-here
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 
+# LLM API Keys
+GROQ_API_KEY=your-groq-api-key
+
 # Firebase
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_PRIVATE_KEY=your-private-key

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # LLM API Keys
     MISTRAL_API_KEY: str
+    GROQ_API_KEY: Optional[str] = None
 
     # Security
     SECRET_KEY: str = "your-secret-key-here-change-in-production"

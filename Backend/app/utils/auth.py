@@ -10,6 +10,7 @@ from app.models.user import TokenData, UserRole
 from app.models.schema import UserSchema
 from app.utils.db import get_db
 import hashlib
+import logging
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -51,6 +52,8 @@ def verify_token(token: str) -> Optional[TokenData]:
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     """Get current user from JWT token"""
+    logging.info("Auth: Starting user authentication")
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -58,14 +61,22 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     )
     
     token = credentials.credentials
+    logging.info(f"Auth: Received token (length: {len(token)})")
+    
     token_data = verify_token(token)
     if token_data is None:
+        logging.error("Auth: Token verification failed - invalid or expired token")
         raise credentials_exception
+    
+    logging.info(f"Auth: Token verified for user_id: {token_data.user_id}, email: {token_data.email}")
     
     # Get user from database
     user = db.query(UserSchema).filter(UserSchema.id == token_data.user_id).first()
     if user is None:
+        logging.error(f"Auth: User not found in database for user_id: {token_data.user_id}")
         raise credentials_exception
+    
+    logging.info(f"Auth: User found - id: {user.id}, email: {user.email}, active: {user.is_active}")
     
     # Convert SQLAlchemy model to dict to match existing return format
     user_data = {
@@ -84,6 +95,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         "last_login": user.last_login
     }
     
+    logging.info("Auth: Authentication successful")
     return user_data
 
 def get_current_active_user(current_user: dict = Depends(get_current_user)):
