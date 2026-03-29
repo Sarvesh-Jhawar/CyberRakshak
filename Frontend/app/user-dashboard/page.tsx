@@ -28,6 +28,7 @@ import Image from "next/image"
 import { AIResponse } from "@/components/dashboard/AIResponse"
 import ReactMarkdown from "react-markdown"
 import { useRouter } from "next/navigation"
+import { GmailConnect } from "@/components/gmail-connect"
 
 interface Incident {
   id: string;
@@ -71,6 +72,29 @@ export default function UserDashboard() {
 
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const router = useRouter();
+
+  // Check for Gmail OAuth callback redirect
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const gmailConnected = searchParams.get('gmail_connected')
+    const gmailError = searchParams.get('gmail_error')
+
+    if (gmailConnected === 'true') {
+      toast.success("Gmail Connected!", {
+        description: "Your Gmail account has been successfully connected. Emails will sync shortly.",
+      })
+      // Clean up URL
+      window.history.replaceState({}, '', '/user-dashboard')
+    }
+
+    if (gmailError) {
+      toast.error("Gmail Connection Failed", {
+        description: gmailError,
+      })
+      // Clean up URL
+      window.history.replaceState({}, '', '/user-dashboard')
+    }
+  }, [])
 
 
   const getStatusBadgeVariant = (status: string) => {
@@ -250,6 +274,14 @@ export default function UserDashboard() {
           <div>
             <h1 className="text-3xl font-bold text-foreground">Welcome to Your Security Dashboard</h1>
             <p className="text-muted-foreground mt-2">Stay protected with real-time monitoring and instant support</p>
+          </div>
+          <div className="flex gap-2">
+            <GmailConnect />
+            <Link href="/user-dashboard/gmail-analysis">
+              <Button variant="outline" size="sm">
+                📧 View Email Analysis
+              </Button>
+            </Link>
           </div>
         </div>
 

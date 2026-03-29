@@ -41,6 +41,19 @@ export const api = {
         delete: (id: string | number) => `${API_BASE_URL}/api/notifications/${id}`,
         markAllRead: `${API_BASE_URL}/api/notifications/read-all`,
         count: `${API_BASE_URL}/api/notifications/count`,
+    },
+    gmail: {
+        authorize: `${API_BASE_URL}/api/v1/auth/gmail/authorize`,
+        callback: `${API_BASE_URL}/api/v1/auth/gmail/callback`,
+        disconnect: `${API_BASE_URL}/api/v1/auth/gmail/disconnect`,
+        status: `${API_BASE_URL}/api/v1/auth/gmail/status`,
+    },
+    emails: {
+        list: `${API_BASE_URL}/api/v1/emails`,
+        detail: (id: string) => `${API_BASE_URL}/api/v1/emails/${id}`,
+        stats: `${API_BASE_URL}/api/v1/emails/stats/overview`,
+        markRead: (id: string) => `${API_BASE_URL}/api/v1/emails/${id}/mark-read`,
+        delete: (id: string) => `${API_BASE_URL}/api/v1/emails/${id}`,
     }
 };
 
