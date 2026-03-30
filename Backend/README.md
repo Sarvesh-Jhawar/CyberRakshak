@@ -7,6 +7,8 @@ A FastAPI-based backend for the CyberRakshak Defence Cybersecurity Portal, featu
 - **Authentication & Authorization**: JWT-based auth with role-based access control
 - **Incident Management**: Report, track, and manage cybersecurity incidents
 - **ML Integration**: Automated threat detection using pre-trained models
+- **Gmail Integration**: Secure Gmail OAuth2 authentication, email reading, and real-time threat detection
+- **Email Analysis**: Phishing and malware detection with threat scoring for email messages
 - **Admin Dashboard**: Comprehensive admin tools and analytics
 - **Firebase Integration**: Scalable NoSQL database with real-time capabilities
 - **RESTful API**: Well-documented API with automatic OpenAPI documentation
@@ -64,6 +66,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # LLM API Keys
 GROQ_API_KEY=your-groq-api-key
+MISTRAL_API_KEY=your-mistral-api-key
+
+# Gmail Integration
+GMAIL_CLIENT_ID=your-google-oauth-client-id
+GMAIL_CLIENT_SECRET=your-google-oauth-client-secret
+GMAIL_REDIRECT_URI=http://localhost:8000/api/v1/auth/gmail/callback
 
 # Firebase
 FIREBASE_PROJECT_ID=your-project-id
@@ -121,19 +129,54 @@ The API will be available at:
 - `POST /api/v1/admin/notifications/bulk` - Send bulk notifications
 - `POST /api/v1/admin/system/backup` - Create system backup
 
+### Gmail & Email Analysis
+- `POST /api/v1/auth/gmail/connect` - Connect Gmail account via OAuth2
+- `GET /api/v1/auth/gmail/disconnect` - Disconnect Gmail account
+- `GET /api/v1/emails/` - Fetch and analyze emails from Gmail
+- `GET /api/v1/emails/{email_id}` - Get detailed email analysis with threat score
+- `POST /api/v1/emails/scan` - Manual scan of selected emails
+- `GET /api/v1/emails/threats` - Get flagged emails with threat scores
+
 ### Analytics & Reports
 - `GET /api/analytics/monthly` - Monthly analytics
 - `GET /api/analytics/threat-types` - Threat type distribution
 - `GET /api/analytics/department-risk` - Department risk analysis
 - `GET /api/system/status` - System status
 
+## Gmail Setup
+
+### OAuth2 Configuration
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable Gmail API and Google+ API
+4. Create OAuth2 credentials (Desktop Application)
+5. Set Authorized redirect URI: `http://localhost:8000/api/v1/auth/gmail/callback`
+6. Download credentials and add to `.env`:
+   ```env
+   GMAIL_CLIENT_ID=your-client-id
+   GMAIL_CLIENT_SECRET=your-client-secret
+   ```
+
+### Email Analysis Features
+
+- **Automatic Email Fetching**: Securely reads emails from Gmail inbox
+- **Phishing Detection**: Analyzes URLs for phishing patterns using pre-trained Random Forest model
+- **Threat Scoring**: Generates comprehensive threat scores combining:
+  - URL phishing risk assessment (99.86% accuracy)
+  - Sender domain reputation checks
+  - Email header anomaly detection (SPF, DKIM, DMARC)
+  - Suspicious content keyword detection
+- **Real-time Results**: Displays threat scores and recommendations in the frontend
+
 ## ML Models Integration
 
 The backend integrates with pre-trained ML models for:
 
 - **Malware Detection**: Random Forest model for file analysis
-- **Phishing Detection**: URL and email analysis
+- **Phishing Detection**: URL and email analysis (99.86% accuracy, 99.95% AUC)
 - **Ransomware Detection**: Advanced threat detection
+- **Email Threat Analysis**: Combined URL phishing + email header analysis
 
 Models are automatically loaded from the `../models/` directory and used for incident analysis.
 

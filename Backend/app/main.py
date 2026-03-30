@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from datetime import datetime, timezone
 from fastapi.responses import JSONResponse
 from app.config import settings
-from app.routes import auth, incidents, admin, report, notifications, llm, chat
+from app.routes import auth, incidents, admin, report, notifications, llm, chat, emails
 import uvicorn
 
 # Create media directory if it doesn't exist
@@ -44,6 +44,37 @@ app.include_router(report.router)
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(llm.router)
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(emails.router, prefix="/api/v1")
+
+# Global scheduler instance
+scheduler = None
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize application on startup"""
+    global scheduler
+    print(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
+    print("API Documentation available at /docs")
+
+    try:
+        if settings.GMAIL_CLIENT_ID and settings.GMAIL_CLIENT_SECRET:
+            from app.utils.background_tasks import start_email_sync_scheduler
+            scheduler = await start_email_sync_scheduler()
+            print("✓ Email sync scheduler initialized")
+        else:
+            print("⚠ Gmail OAuth not configured - email sync disabled")
+    except Exception as e:
+        print(f"⚠ Failed to initialize email sync scheduler: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    global scheduler
+    if scheduler and scheduler.running:
+        scheduler.shutdown()
+        print("✓ Email sync scheduler stopped")
+
+    print("Shutting down CyberRakshak API")
 
 # Root endpoint
 @app.get("/")

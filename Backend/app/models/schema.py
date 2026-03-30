@@ -29,7 +29,20 @@ class UserSchema(Base):
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     last_login = Column(String, nullable=True)
-    
+
+class GmailAccountSchema(Base):
+    __tablename__ = "gmail_accounts"
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    oauth_provider = Column(String, nullable=True)
+    oauth_id = Column(String, nullable=True)
+    gmail_access_token = Column(String, nullable=True)
+    gmail_refresh_token = Column(String, nullable=True)
+    gmail_token_expires_at = Column(DateTime, nullable=True)
+    gmail_connected = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
 class IncidentCategory(str, enum.Enum):
     PHISHING = "phishing"
     MALWARE = "malware"
@@ -127,3 +140,18 @@ class BackupSchema(Base):
     size = Column(String, nullable=False)
     tables = Column(JSON, nullable=False)
 
+class EmailSchema(Base):
+    __tablename__ = "gmail_emails"
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    gmail_message_id = Column(String, unique=True, index=True)
+    subject = Column(String, nullable=True)
+    from_address = Column(String, nullable=True)
+    to_address = Column(String, nullable=True)
+    body_preview = Column(String, nullable=True)
+    phishing_score = Column(String, nullable=True)  # Float stored as string
+    threat_level = Column(String, nullable=True)  # "safe", "suspicious", "malicious"
+    ml_analysis = Column(JSON, nullable=True)  # Store detailed model output
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

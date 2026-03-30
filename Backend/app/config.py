@@ -40,6 +40,23 @@ class Settings(BaseSettings):
     ML_MODELS_PATH: str = "../models"
     ML_API_BASE_URL: str = "http://127.0.0.1:8000"
     
+    # Gmail OAuth Settings
+    GMAIL_CLIENT_ID: Optional[str] = None
+    GMAIL_CLIENT_SECRET: Optional[str] = None
+    GMAIL_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/gmail/callback"
+    GMAIL_SCOPES: str = "https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/userinfo.profile,openid"
+    ENCRYPTION_KEY: Optional[str] = None
+    
+    @property
+    def gmail_scopes_list(self) -> list[str]:
+        """Convert comma-separated scopes string to list"""
+        return [scope.strip() for scope in self.GMAIL_SCOPES.split(',')]
+    
+    # Email Sync Settings
+    EMAIL_SYNC_INTERVAL_MINUTES: int = 15
+    EMAIL_FETCH_LIMIT: int = 20
+    EMAIL_RETENTION_DAYS: int = 30
+    
     # Debug Mode
     DEBUG: bool = True
     

@@ -1,18 +1,26 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import RedirectResponse
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
+import logging
+import uuid
 from app.utils.auth import (
     authenticate_user, create_access_token, get_password_hash,
     get_current_user, generate_user_id, validate_email_domain,
 )
 from app.utils.db import get_db
-from app.models.schema import UserSchema
+from app.models.schema import UserSchema, GmailAccountSchema
 from app.config import settings
 from app.models.user import UserCreate, UserLogin, Token, User, UserRole
 from app.models.response import StandardResponse
 from pydantic import BaseModel, EmailStr
+
+logger = logging.getLogger(__name__)
+
+# Temporary in-memory store for OAuth state -> user_id mapping (expires after 10 minutes)
+oauth_state_store: Dict[str, tuple[str, float]] = {}
 
 class UserResponse(BaseModel):
     id: str
@@ -260,4 +268,228 @@ async def refresh_token(current_user: Dict[str, Any] = Depends(get_current_user)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Token refresh failed: {str(e)}"
+        )
+
+
+# ======================== Gmail OAuth Routes ========================
+
+@router.get("/gmail/authorize", response_model=StandardResponse)
+async def gmail_authorize(current_user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Start Gmail OAuth flow - returns authorization URL"""
+    try:
+        if not settings.GMAIL_CLIENT_ID or not settings.GMAIL_CLIENT_SECRET:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Gmail OAuth not configured"
+            )
+        
+        from app.utils.gmail_service import GmailService
+        import time
+        
+        user_id = current_user["id"]
+        
+        gmail_service = GmailService(
+            settings.GMAIL_CLIENT_ID,
+            settings.GMAIL_CLIENT_SECRET,
+            settings.GMAIL_REDIRECT_URI,
+            settings.gmail_scopes_list,
+            settings.ENCRYPTION_KEY
+        )
+        
+        # Generate auth URL with a unique state
+        auth_url, state = gmail_service.get_auth_url()
+        
+        # Store user_id temporarily with state (expires in 10 minutes)
+        oauth_state_store[state] = (user_id, time.time() + 600)
+        
+        return StandardResponse(
+            success=True,
+            message="Authorization URL generated",
+            data={"auth_url": auth_url, "state": state}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate authorization URL: {str(e)}"
+        )
+
+
+@router.get("/gmail/callback")
+async def gmail_callback(code: str, state: str, db: Session = Depends(get_db)):
+    """Handle Gmail OAuth callback and redirect to dashboard"""
+    try:
+        if not code:
+            return RedirectResponse(
+                url="http://localhost:3000/user-dashboard?gmail_error=No authorization code provided",
+                status_code=302
+            )
+        
+        from app.utils.gmail_service import GmailService
+        import time
+        
+        # Look up user_id from state
+        if state not in oauth_state_store:
+            return RedirectResponse(
+                url="http://localhost:3000/user-dashboard?gmail_error=Invalid state parameter - session expired",
+                status_code=302
+            )
+        
+        user_id, expiry_time = oauth_state_store[state]
+        
+        # Check if state has expired (more than 10 minutes)
+        if time.time() > expiry_time:
+            del oauth_state_store[state]
+            return RedirectResponse(
+                url="http://localhost:3000/user-dashboard?gmail_error=Authorization session expired. Please try again.",
+                status_code=302
+            )
+        
+        # Clean up state
+        del oauth_state_store[state]
+        
+        gmail_service = GmailService(
+            settings.GMAIL_CLIENT_ID,
+            settings.GMAIL_CLIENT_SECRET,
+            settings.GMAIL_REDIRECT_URI,
+            settings.gmail_scopes_list,
+            settings.ENCRYPTION_KEY
+        )
+        
+        # Exchange code for token
+        credentials = gmail_service.exchange_code_for_token(code)
+        
+        # Get Google's OAuth ID from ID token
+        oauth_id = credentials.get('id_token', '').split('.')[1] if 'id_token' in credentials else str(uuid.uuid4())
+        
+        # Check if user exists
+        user = db.query(UserSchema).filter(UserSchema.id == user_id).first()
+        if not user:
+            return RedirectResponse(
+                url="http://localhost:3000/user-dashboard?gmail_error=User not found",
+                status_code=302
+            )
+        
+        # Check if Gmail account record exists for this user
+        existing_gmail_account = db.query(GmailAccountSchema).filter(
+            GmailAccountSchema.user_id == user_id
+        ).first()
+        
+        if existing_gmail_account:
+            # Update existing Gmail account credentials (session-based, will be cleared on logout)
+            existing_gmail_account.gmail_access_token = gmail_service.encrypt_token(credentials['access_token'])
+            existing_gmail_account.gmail_refresh_token = gmail_service.encrypt_token(credentials.get('refresh_token', ''))
+            existing_gmail_account.gmail_token_expires_at = datetime.utcnow() + timedelta(seconds=credentials.get('expires_in', 3600))
+            existing_gmail_account.gmail_connected = True
+            existing_gmail_account.updated_at = datetime.utcnow()
+            existing_gmail_account.oauth_provider = 'google'
+            existing_gmail_account.oauth_id = oauth_id
+            db.commit()
+        else:
+            # Create new Gmail account record (session-based, will be cleared on logout)
+            new_gmail_account = GmailAccountSchema(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                oauth_provider='google',
+                oauth_id=oauth_id,
+                gmail_access_token=gmail_service.encrypt_token(credentials['access_token']),
+                gmail_refresh_token=gmail_service.encrypt_token(credentials.get('refresh_token', '')),
+                gmail_token_expires_at=datetime.utcnow() + timedelta(seconds=credentials.get('expires_in', 3600)),
+                gmail_connected=True,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(new_gmail_account)
+            db.commit()
+        
+        # Trigger immediate sync for this user after successful Gmail connect
+        try:
+            from app.utils.background_tasks import sync_service
+            await sync_service.sync_user_emails(user_id, db)
+        except Exception as sync_err:
+            logger.warning(f"Immediate email sync failed for user {user_id}: {sync_err}")
+
+        # Redirect to dashboard with success message
+        return RedirectResponse(
+            url="http://localhost:3000/user-dashboard?gmail_connected=true",
+            status_code=302
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing Gmail callback: {str(e)}")
+        return RedirectResponse(
+            url=f"http://localhost:3000/user-dashboard?gmail_error={str(e)[:100]}",
+            status_code=302
+        )
+
+
+@router.post("/gmail/disconnect", response_model=StandardResponse)
+async def disconnect_gmail(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Disconnect Gmail from user account"""
+    try:
+        user_id = current_user["id"]
+        gmail_account = db.query(GmailAccountSchema).filter(GmailAccountSchema.user_id == user_id).first()
+        
+        if not gmail_account:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Gmail account not found"
+            )
+        
+        # Clear Gmail credentials
+        gmail_account.gmail_access_token = None
+        gmail_account.gmail_refresh_token = None
+        gmail_account.gmail_token_expires_at = None
+        gmail_account.gmail_connected = False
+        db.commit()
+        
+        return StandardResponse(
+            success=True,
+            message="Gmail disconnected successfully"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to disconnect Gmail: {str(e)}"
+        )
+
+
+@router.get("/gmail/status", response_model=StandardResponse)
+async def get_gmail_status(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get Gmail connection status for current user"""
+    try:
+        user_id = current_user["id"]
+        gmail_account = db.query(GmailAccountSchema).filter(GmailAccountSchema.user_id == user_id).first()
+        
+        if not gmail_account:
+            return StandardResponse(
+                success=True,
+                message="Gmail status retrieved",
+                data={"gmail_connected": False, "oauth_provider": None}
+            )
+        
+        return StandardResponse(
+            success=True,
+            message="Gmail status retrieved",
+            data={
+                "gmail_connected": gmail_account.gmail_connected,
+                "oauth_provider": gmail_account.oauth_provider
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get Gmail status: {str(e)}"
         )
