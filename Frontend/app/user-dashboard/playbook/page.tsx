@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { playbooksData, Locale } from "./data"
 import { UserLayout } from "@/components/dashboard/user-layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,6 +29,10 @@ import {
 
 export default function PlaybookPage() {
   const [searchTerm, setSearchTerm] = useState("")
+  const searchParams = useSearchParams()
+  const highlightParam = searchParams.get('highlight')
+  const [highlightedId, setHighlightedId] = useState<string | null>(highlightParam)
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const [speakingId, setSpeakingId] = useState<string | null>(null)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
@@ -76,6 +81,27 @@ export default function PlaybookPage() {
       }
     }
   }, [])
+
+  // Handle highlight from chatbot deep link
+  useEffect(() => {
+    if (highlightParam && cardRefs.current[highlightParam]) {
+      // Scroll to the highlighted card
+      setTimeout(() => {
+        cardRefs.current[highlightParam]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Auto-play TTS for the info section
+        const playbook = playbooksData.find(p => p.id === highlightParam);
+        if (playbook) {
+          const infoStep = playbook.steps.find(s => s.priority === 'Info');
+          if (infoStep) {
+            handleSpeak(`${highlightParam}-info`, infoStep.actions[selectedLocale].join('. '));
+          }
+        }
+      }, 500);
+      // Remove highlight after 5 seconds
+      const timer = setTimeout(() => setHighlightedId(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightParam, selectedLocale]);
   
   const filteredPlaybooks = useMemo(() => {
     return playbooksData.filter((playbook) => {
@@ -194,8 +220,17 @@ export default function PlaybookPage() {
           {filteredPlaybooks.map((playbook) => {
             const Icon = playbook.icon
             const infoStep = playbook.steps.find((step) => step.priority === "Info")
+            const isHighlighted = highlightedId === playbook.id
             return (
-              <Card key={playbook.id}>
+              <Card
+                key={playbook.id}
+                ref={(el) => { cardRefs.current[playbook.id] = el }}
+                className={`transition-all duration-500 ${
+                  isHighlighted
+                    ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/20 scale-[1.01]'
+                    : ''
+                }`}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3">

@@ -2,6 +2,9 @@
 
 const API_BASE_URL = "http://127.0.0.1:8000"; // Assuming this is the root
 
+// ML Model API — runs separately on port 8001 (start with: uvicorn api.main:app --port 8001)
+export const ML_API_BASE_URL = "http://127.0.0.1:8001";
+
 export const api = {
     auth: {
         login: `${API_BASE_URL}/api/v1/auth/login`,
@@ -17,6 +20,15 @@ export const api = {
     },
     chat: {
         sudarshan: `${API_BASE_URL}/api/llm/sudarshan-chakra`,
+    },
+    // ML model endpoints (called by the backend agent, not the frontend directly)
+    ml_models: {
+        phishing: `${ML_API_BASE_URL}/predict/phishing`,
+        malware: `${ML_API_BASE_URL}/predict/malware`,
+        ransomware: `${ML_API_BASE_URL}/predict/ransomware`,
+        networking: `${ML_API_BASE_URL}/predict/networking`,
+        zeroDay: `${ML_API_BASE_URL}/predict/zero-day`,
+        health: `${ML_API_BASE_URL}/`,
     },
     admin: {
         dashboardStats: `${API_BASE_URL}/api/v1/admin/dashboard/stats`,
@@ -73,21 +85,22 @@ interface ChatMessage {
 }
 
 /**
- * Analyzes the given text and optional image using the backend LLM service.
+ * Analyzes the given text and optional file using the backend LLM service.
+ * Supports images (sent to vision model), PDFs, and DOCX files.
  *
  * @param textInput The text to be analyzed.
  * @param history The conversation history.
- * @param imageFile An optional image file to be included in the analysis.
+ * @param attachedFile An optional file (image, PDF, DOCX) to be included in the analysis.
  * @returns A promise that resolves to the JSON analysis from the backend.
  * @throws An error if the request fails.
  */
-export async function analyzeWithLlm(textInput: string, history: ChatMessage[], imageFile?: File): Promise<any> {
+export async function analyzeWithLlm(textInput: string, history: ChatMessage[], attachedFile?: File): Promise<any> {
   const formData = new FormData();
   formData.append('text_input', textInput);
   formData.append('history', JSON.stringify(history));
 
-  if (imageFile) {
-    formData.append('image', imageFile);
+  if (attachedFile) {
+    formData.append('file', attachedFile);
   }
 
   try {
@@ -106,7 +119,9 @@ export async function analyzeWithLlm(textInput: string, history: ChatMessage[], 
           throw new Error('Authentication failed. Please log in again.');
       }
       const errorData = await response.json();
-      throw new Error(errorData.detail || 'An unknown error occurred.');
+      const detail = errorData.detail;
+      const errorMsg = typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ') : 'An unknown error occurred.');
+      throw new Error(errorMsg);
     }
 
     return await response.json();

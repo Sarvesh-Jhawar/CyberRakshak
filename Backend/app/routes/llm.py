@@ -10,17 +10,31 @@ Phase 5  : Structured threat report returned to frontend
 """
 
 import os
+import io
 import httpx
 import json
 import base64
 import uuid
 import asyncio
 import re
+import mimetypes
+import hashlib
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status, Form, File, UploadFile, Depends
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 from dotenv import load_dotenv
+
+# Document parsing
+try:
+    from PyPDF2 import PdfReader
+except ImportError:
+    PdfReader = None
+
+try:
+    from docx import Document as DocxDocument
+except ImportError:
+    DocxDocument = None
 from app.utils.auth import get_current_user
 
 load_dotenv()
@@ -156,14 +170,102 @@ MODEL_METADATA = {
     }
 }
 
+# ─── File Text Extraction Helper ─────────────────────────────────────────────
+def get_file_type(filename: str, content_type: str = "") -> str:
+    """Detect file type from filename extension or MIME type."""
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext in [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"]:
+        return "image"
+    if ext == ".pdf" or "pdf" in content_type:
+        return "pdf"
+    if ext in [".docx", ".doc"] or "wordprocessingml" in content_type:
+        return "docx"
+    if ext in [".exe", ".dll", ".bat", ".cmd", ".msi", ".apk", ".sh", ".jar", ".ps1", ".vbs", ".scr", ".com"]:
+        return "executable"
+    return "unknown"
+
+
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    """Extract all text from a PDF file."""
+    if PdfReader is None:
+        return "[Error: PyPDF2 not installed — cannot parse PDF]"
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))
+        text_parts = []
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text_parts.append(page_text)
+        extracted = "\n".join(text_parts).strip()
+        if not extracted:
+            return "[PDF contained no extractable text — possibly scanned/image-based]"
+        return extracted
+    except Exception as e:
+        return f"[Error extracting PDF text: {str(e)}]"
+
+
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    """Extract all text from a DOCX file."""
+    if DocxDocument is None:
+        return "[Error: python-docx not installed — cannot parse DOCX]"
+    try:
+        doc = DocxDocument(io.BytesIO(file_bytes))
+        text_parts = [para.text for para in doc.paragraphs if para.text.strip()]
+        extracted = "\n".join(text_parts).strip()
+        if not extracted:
+            return "[DOCX contained no extractable text]"
+        return extracted
+    except Exception as e:
+        return f"[Error extracting DOCX text: {str(e)}]"
+
+
 # ─── Groq API Helper ─────────────────────────────────────────────────────────
-async def call_groq(messages: List[Dict], timeout: float = 60.0, json_mode: bool = True) -> Dict:
+VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+TEXT_MODEL = "llama-3.1-8b-instant"
+
+
+async def call_groq(
+    messages: List[Dict],
+    timeout: float = 60.0,
+    json_mode: bool = True,
+    image_base64: Optional[str] = None,
+    image_media_type: str = "image/jpeg",
+) -> Dict:
+    """
+    Call Groq API. If image_base64 is provided, uses the vision model
+    with multimodal content blocks. Otherwise uses the fast text model.
+    """
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
+
+    # Determine model based on whether an image is present
+    use_vision = image_base64 is not None
+    model = VISION_MODEL if use_vision else TEXT_MODEL
+
+    # If vision: rewrite the last user message as multimodal content blocks
+    if use_vision and messages:
+        processed_messages = []
+        for msg in messages:
+            if msg["role"] == "user" and msg is messages[-1]:
+                # Convert the last user message to multimodal format
+                content_blocks = [
+                    {"type": "text", "text": msg["content"]},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{image_media_type};base64,{image_base64}"
+                        }
+                    }
+                ]
+                processed_messages.append({"role": "user", "content": content_blocks})
+            else:
+                processed_messages.append(msg)
+        messages = processed_messages
+
     payload = {
-        "model": "llama-3.1-8b-instant",
+        "model": model,
         "messages": messages,
     }
     if json_mode:
@@ -379,29 +481,39 @@ PAYLOAD_BUILDERS = {
 ROUTER_SYSTEM_PROMPT = """
 You are CyberRakshak's routing engine. Analyze the user message and conversation history.
 
-Your job: classify the threat type and extract all available parameters.
+Your job: Classify the message into one of two primary categories:
+1. EDUCATIONAL/GENERAL QUESTION: The user is asking for definitions, explanations, or general knowledge (e.g., "tell me about phishing", "what is ransomware", "how does a DDoS attack work?"). 
+   -> ROUTE TO: "general_question"
+
+2. THREAT REPORT/ANALYSIS: The user is describing a specific incident they are currently experiencing, or asking to analyze a specific URL, file, or suspicious activity (e.g., "I got a suspicious email", "can you check this link?", "my files are encrypted").
+   -> ROUTE TO: phishing|malware|ransomware|networking|zero-day
 
 ROUTING RULES:
-- "phishing": suspicious URLs, domain spoofing, email links, SMS scams, fake login pages
-- "malware": suspicious files, .exe/.dll analysis, file hashes, malware detection
-- "ransomware": file encryption, registry changes, .locked/.encrypted files, ransom notes, mass file deletion, suspicious API calls on OS
-- "networking": network traffic anomalies, DDoS, TCP/UDP flows, suspicious ports, intrusion detection, bandwidth spikes
-- "zero-day": unknown exploits, novel attack patterns, zero-day vulnerabilities, unidentified behavior, anomalous zero-day
-- "general_question": general cybersecurity question, not a live threat report
+- "phishing": Analyzing a specific suspicious URL, domain, email, or SMS scam.
+- "malware": Analyzing a specific suspicious file, hash, or executable.
+- "ransomware": Analyzing a live ransomware incident (encrypted files, ransom notes).
+- "networking": Analyzing specific network traffic anomalies or DDoS attacks currently happening.
+- "zero-day": Unknown or novel attack patterns requiring deep behavioral analysis.
+- "general_question": EDUCATIONAL queries. Any question asking "What is X?", "Tell me about X", "How to prevent X?" where NO specific incident is being reported.
 
-For PHISHING, extract: url, domain_name, subject, body, sender_email, brand_spoofed, urgency_language
-For MALWARE, extract: file_name, file_hash, hash_type, file_extension, file_size, is_suspicious(bool), exec_vm_est(int), total_vm_est(int)
-For RANSOMWARE, extract: registry_delete_count(int), registry_write_count(int), registry_read_count(int), suspicious_process_count(int), network_connection_count(int), encrypted_file_count(int), api_call_count(int), pe_section_count(int), entropy_estimate(float 0-1), is_packed(0/1), creation_year(int)
-For NETWORKING, extract: protocol_type(tcp/udp/icmp), service(http/ftp/etc), flag(SF/S0/REJ/etc), src_bytes(int), dst_bytes(int), duration(int), count(int), serror_rate(float), wrong_fragment(int), num_failed_logins(int), root_shell(int)
-For ZERO-DAY, extract: protocol, flag, src_bytes(int), dst_bytes(int), payload_size(int), number_of_packets(int), btc(float), usd(float), netflow_bytes(int)
+EXTRACT PARAMETERS ONLY IF IT'S A THREAT REPORT:
+- For phishing: url, domain_name, subject, body, sender_email, brand_spoofed, urgency_language
+- For malware: file_name, file_hash, hash_type, file_extension, file_size
+- For ransomware: registry_delete_count(int), registry_write_count(int), registry_read_count(int), suspicious_process_count(int), network_connection_count(int), encrypted_file_count(int)
+- For networking: protocol_type(tcp/udp/icmp), service(http/ftp/etc), flag(SF/S0/REJ/etc), src_bytes(int), dst_bytes(int)
+- For zero-day: protocol, flag, src_bytes(int), dst_bytes(int), payload_size(int)
+
+IMPORTANT — HANDLING USER DECLINING TO PROVIDE INFO:
+If the user says "no", "I don't have it", "skip", or declines, set "missing_required_params" to [] and "user_declined_params" to true.
 
 Return ONLY valid JSON:
 {
   "threat_type": "phishing|malware|ransomware|networking|zero-day|general_question",
-  "extracted_params": { ... all params you could extract from the text ... },
-  "missing_required_params": [ list of required param names that are truly absent ],
+  "extracted_params": { ... },
+  "missing_required_params": [ ... ],
+  "user_declined_params": false,
   "confidence_routing": "high|medium|low",
-  "routing_reason": "one sentence why you chose this model"
+  "routing_reason": "Briefly explain if this was an educational question or a threat report"
 }
 """
 
@@ -525,13 +637,14 @@ def synthesize_confidence(ml_result: Optional[Dict], llm_verdict: str, llm_sever
 @router.post("/api/llm/analyze")
 async def analyze_input(
     history: str = Form("[]"),
-    text_input: str = Form(...),
-    image: Optional[UploadFile] = File(None),
+    text_input: str = Form(""),
+    file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user)
 ):
     """
     CyberRakshak Router-to-Synthesizer Agent endpoint.
     Analyzes user threat descriptions via routing → ML inference → LLM synthesis.
+    Supports multimodal input: text, images (via vision model), PDFs, and DOCX files.
     """
 
     # Parse conversation history
@@ -546,20 +659,87 @@ async def analyze_input(
     for msg in parsed_history[-6:]:  # Last 6 messages for context
         history_msgs.append({"role": msg["role"], "content": str(msg["content"])})
 
-    # Handle image attachment
+    # Handle file attachment (supports images, PDFs, DOCX)
     user_content = text_input
-    if image:
+    image_base64 = None
+    image_media_type = "image/jpeg"
+
+    if file:
         try:
-            image_bytes = await image.read()
-            encoded = base64.b64encode(image_bytes).decode()
-            user_content = f"{text_input}\n[Image attached: {image.filename}, base64 encoded]"
-        except Exception:
-            pass
+            file_bytes = await file.read()
+            file_type = get_file_type(file.filename or "", file.content_type or "")
+
+            if file_type == "image":
+                # Encode image for vision model
+                image_base64 = base64.b64encode(file_bytes).decode()
+                # Detect MIME type
+                ext = os.path.splitext(file.filename or "")[1].lower()
+                mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                            ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"}
+                image_media_type = mime_map.get(ext, "image/jpeg")
+                user_content = f"{text_input}\n[Image attached: {file.filename} — analyze this image for cybersecurity threats, phishing, scams, or suspicious content]"
+
+            elif file_type == "pdf":
+                extracted_text = extract_text_from_pdf(file_bytes)
+                user_content = (
+                    f"{text_input}\n\n"
+                    f"--- ATTACHED PDF: {file.filename} ---\n"
+                    f"{extracted_text[:8000]}\n"
+                    f"--- END OF PDF ---"
+                )
+
+            elif file_type == "docx":
+                extracted_text = extract_text_from_docx(file_bytes)
+                user_content = (
+                    f"{text_input}\n\n"
+                    f"--- ATTACHED DOCX: {file.filename} ---\n"
+                    f"{extracted_text[:8000]}\n"
+                    f"--- END OF DOCX ---"
+                )
+
+            elif file_type == "executable":
+                # For executables/binaries: extract metadata for threat analysis
+                file_ext = os.path.splitext(file.filename or "")[1].lower()
+                file_size = len(file_bytes)
+                file_md5 = hashlib.md5(file_bytes).hexdigest()
+                file_sha256 = hashlib.sha256(file_bytes).hexdigest()
+                user_content = (
+                    f"{text_input}\n\n"
+                    f"--- ATTACHED EXECUTABLE/BINARY FILE ---\n"
+                    f"Filename: {file.filename}\n"
+                    f"Extension: {file_ext}\n"
+                    f"File Size: {file_size} bytes ({file_size / 1024:.1f} KB)\n"
+                    f"MD5 Hash: {file_md5}\n"
+                    f"SHA-256 Hash: {file_sha256}\n"
+                    f"Content-Type: {file.content_type or 'unknown'}\n"
+                    f"\nThis is a binary/executable file uploaded for malware analysis. "
+                    f"Analyze the file metadata above for potential threats.\n"
+                    f"--- END OF FILE METADATA ---"
+                )
+
+            else:
+                # Unknown file type — try reading as plain text
+                try:
+                    text_content = file_bytes.decode("utf-8", errors="ignore")
+                    user_content = (
+                        f"{text_input}\n\n"
+                        f"--- ATTACHED FILE: {file.filename} ---\n"
+                        f"{text_content[:8000]}\n"
+                        f"--- END OF FILE ---"
+                    )
+                except Exception:
+                    user_content = f"{text_input}\n[File attached: {file.filename} — unsupported format]"
+
+        except Exception as e:
+            user_content = f"{text_input}\n[File upload error: {str(e)}]"
 
     history_msgs.append({"role": "user", "content": user_content})
 
     # ── Phase 1: Route ────────────────────────────────────────────────────────
-    routing_result = await call_groq(history_msgs, timeout=30.0, json_mode=True)
+    routing_result = await call_groq(
+        history_msgs, timeout=30.0, json_mode=True,
+        image_base64=image_base64, image_media_type=image_media_type
+    )
     threat_type = routing_result.get("threat_type", "general_question")
     extracted_params = routing_result.get("extracted_params", {})
     missing_params = routing_result.get("missing_required_params", [])
@@ -572,13 +752,33 @@ async def analyze_input(
                 "content": (
                     "You are Sudarshan Chakra, CyberRakshak's cybersecurity AI assistant. "
                     "Answer the user's cybersecurity question clearly and helpfully. "
-                    "Return JSON: {\"intent\": \"general_question\", \"answer\": \"...\"}"
+                    "If an image or document is attached, analyze its contents. "
+                    "Format your answer with markdown for readability. Use headers, bullet points, and bold text. "
+                    "\n\nIMPORTANT: If the user's question relates to a specific cybersecurity topic, "
+                    "include the matching playbook_id from this list:\n"
+                    "- 'phishing' — phishing attacks, suspicious emails, SMS scams\n"
+                    "- 'malware' — malware, viruses, trojans, worms, suspicious files\n"
+                    "- 'fraud' — financial fraud, credit card scams, identity theft\n"
+                    "- 'espionage' — cyber espionage, spying, data theft by state actors\n"
+                    "- 'opsec' — operational security, information disclosure\n"
+                    "- 'social-engineering' — social engineering, pretexting, baiting\n"
+                    "- 'deepfake' — deepfakes, synthetic media, AI-generated fakes\n"
+                    "- 'insider-threats' — insider threats, disgruntled employees\n"
+                    "- 'network-intrusion' — network intrusions, unauthorized access, hacking\n"
+                    "- 'dos-ddos' — DDoS attacks, denial of service\n"
+                    "- 'zero-day' — zero-day exploits, unpatched vulnerabilities\n"
+                    "- 'fake-website' — fake websites, cloned apps, typosquatting\n"
+                    "\nIf no playbook matches, set related_playbook_id to null.\n"
+                    "\nReturn JSON: {\"intent\": \"general_question\", \"answer\": \"...\", \"related_playbook_id\": \"...|null\"}"
                 )
             },
             *[{"role": m["role"], "content": str(m["content"])} for m in parsed_history[-4:]],
             {"role": "user", "content": user_content}
         ]
-        return await call_groq(general_prompt, json_mode=True)
+        return await call_groq(
+            general_prompt, json_mode=True,
+            image_base64=image_base64, image_media_type=image_media_type
+        )
 
     # ── Phase 2: Parameter Validation ────────────────────────────────────────
     model_meta = MODEL_METADATA.get(threat_type, MODEL_METADATA["zero-day"])
@@ -630,7 +830,10 @@ async def analyze_input(
 
     # Run ML inference and LLM contextual analysis in parallel (Phase 3A + 3B)
     ml_task = call_ml_model(model_meta["endpoint"], ml_payload)
-    llm_task = call_groq(contextual_msgs, timeout=60.0, json_mode=True)
+    llm_task = call_groq(
+        contextual_msgs, timeout=60.0, json_mode=True,
+        image_base64=image_base64, image_media_type=image_media_type
+    )
     ml_result, llm_report = await asyncio.gather(ml_task, llm_task)
 
     # ── Phase 4: Synthesis ────────────────────────────────────────────────────

@@ -2,8 +2,17 @@ from typing import Dict, Optional
 from app.utils.ml_service import get_ml_prediction
 import re
 import logging
+import httpx
+import os
+import json
+from datetime import datetime, timezone
+import uuid
 
 logger = logging.getLogger(__name__)
+
+# LLM API Configuration
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 class EmailAnalyzer:
@@ -27,13 +36,13 @@ class EmailAnalyzer:
     
     async def analyze_email(self, email_data: Dict) -> Dict:
         """
-        Analyze email for phishing and other threats
+        Analyze email for phishing and other threats using ML + LLM
         
         Args:
             email_data: Dict with keys: subject, body, from, urls
             
         Returns:
-            Dict with analysis results including phishing_score and threat_level
+            Dict with analysis results including phishing_score, threat_level, ml_analysis, and llm_analysis
         """
         try:
             # Extract features from email
@@ -48,11 +57,22 @@ class EmailAnalyzer:
             # Determine threat level
             threat_level = self._get_threat_level(phishing_score)
             
+            # Get LLM contextual analysis
+            llm_analysis = await self._get_llm_analysis(email_data, ml_result)
+            
+            # Combine ML and LLM analysis
+            combined_analysis = {
+                "ml_analysis": self._format_ml_analysis(ml_result, threat_level),
+                "llm_analysis": llm_analysis,
+                "threat_indicators": self._get_threat_indicators(features, email_data),
+                "features_extracted": features
+            }
+            
             return {
                 "phishing_score": phishing_score,
                 "threat_level": threat_level,
-                "features_extracted": features,
-                "ml_analysis": ml_result,
+                "ml_analysis": combined_analysis,
+                "llm_analysis": llm_analysis,  # Keep for backward compatibility
                 "threat_indicators": self._get_threat_indicators(features, email_data)
             }
         except Exception as e:
@@ -60,8 +80,8 @@ class EmailAnalyzer:
             return {
                 "phishing_score": 0,
                 "threat_level": "unknown",
-                "features_extracted": {},
-                "ml_analysis": None,
+                "ml_analysis": {"error": str(e)},
+                "llm_analysis": {"error": str(e)},
                 "threat_indicators": []
             }
     
@@ -157,29 +177,36 @@ class EmailAnalyzer:
         """Calculate final phishing score (0-100)"""
         score = 0.0
         
-        # Start with ML model result if available
-        if ml_result and 'prediction' in ml_result:
-            score = ml_result['prediction'] * 100
+        # Start with ML model confidence probability (0.0–1.0) scaled to 0–60
+        # Use 'confidence' (probability) not raw 'prediction' (0 or 1)
+        if ml_result:
+            confidence = ml_result.get('confidence', None)
+            if confidence is not None:
+                # Scale confidence to contribute up to 60 points
+                score = float(confidence) * 60.0
+            elif 'prediction' in ml_result:
+                # Fallback: if only binary prediction available, use a moderate score
+                score = 30.0 if ml_result['prediction'] == 1 else 5.0
         
-        # Apply additional heuristics
-        if features.get('suspicious_sender'):
-            score += 15.0
-        
+        # Apply heuristics — each contributes a reasonable portion of the remaining 40 points
         if features.get('has_spoofed_links'):
-            score += 25.0
+            score += 15.0  # Strong signal — domain mismatch
+        
+        if features.get('suspicious_sender'):
+            score += 8.0   # Sender not in known-safe list
         
         if features.get('has_url_shortener'):
-            score += 15.0
+            score += 8.0   # URL shorteners hide destinations
         
         if features.get('has_urgent_keywords'):
-            score += 10.0
+            score += 5.0   # Social engineering language
         
         urgency = features.get('urgency_score', 0)
-        score += urgency * 20
+        score += urgency * 10  # Urgency contributes up to 10 more points
         
-        # Boost if not a safe sender
+        # Reduce score for verified safe senders
         if not features.get('suspicious_sender'):
-            score -= 10.0  # Reduce score for safe senders
+            score -= 8.0
         
         return min(max(score, 0.0), 100.0)  # Clamp between 0-100
     
@@ -225,3 +252,106 @@ class EmailAnalyzer:
             })
         
         return indicators
+    
+    async def _get_llm_analysis(self, email_data: Dict, ml_result: Optional[Dict]) -> Dict:
+        """Get LLM contextual analysis for the email"""
+        if not GROQ_API_KEY:
+            return {"error": "GROQ_API_KEY not configured"}
+        
+        try:
+            # Prepare email content for LLM analysis
+            subject = email_data.get('subject', '')
+            body = email_data.get('body', '')[:1000]  # Limit body length
+            sender = email_data.get('from', '')
+            
+            # Create analysis prompt
+            analysis_prompt = f"""
+Analyze this email for security threats. Provide a detailed assessment.
+
+EMAIL DETAILS:
+Subject: {subject}
+From: {sender}
+Body: {body}
+
+ML Analysis Result: {json.dumps(ml_result) if ml_result else 'No ML analysis available'}
+
+Return ONLY valid JSON with this structure:
+{{
+  "threat_verdict": "MALICIOUS|SUSPICIOUS|BENIGN",
+  "severity": "Critical|High|Medium|Low",
+  "detection_summary": "One-sentence summary of the threat",
+  "user_alert": "Immediate action the user should take",
+  "technical_details": {{
+    "indicators": ["IOC 1", "IOC 2"],
+    "analysis": "Detailed technical explanation"
+  }},
+  "recommended_actions": {{
+    "immediate": ["Action 1", "Action 2"],
+    "investigation": ["Step 1", "Step 2"],
+    "prevention": ["Measure 1", "Measure 2"]
+  }},
+  "playbook": ["Investigation step 1", "Investigation step 2"],
+  "evidence_to_collect": ["Evidence item 1", "Evidence item 2"]
+}}
+"""
+            
+            # Call Groq API
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    GROQ_URL,
+                    headers={
+                        "Authorization": f"Bearer {GROQ_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "llama-3.1-8b-instant",
+                        "messages": [
+                            {"role": "system", "content": "You are CyberRakshak's email security analyzer. Analyze emails for threats and provide actionable security recommendations."},
+                            {"role": "user", "content": analysis_prompt}
+                        ],
+                        "response_format": {"type": "json_object"}
+                    }
+                )
+                response.raise_for_status()
+                result = response.json()
+                
+                # Extract the JSON response
+                content = result["choices"][0]["message"]["content"]
+                return json.loads(content)
+                
+        except Exception as e:
+            logger.error(f"Error getting LLM analysis: {e}")
+            return {"error": str(e)}
+    
+    def _format_ml_analysis(self, ml_result: Optional[Dict], threat_level: str) -> Dict:
+        """Format ML analysis results for consistent display"""
+        if not ml_result:
+            return {
+                "model_used": "Phishing Evaluator (RF)",
+                "model_accuracy": "99.86%",
+                "model_roc_auc": "99.95%",
+                "model_description": "Custom URL-structure + text-feature extraction + Random Forest",
+                "threat_probability": 0.0,
+                "prediction": "unknown",
+                "confidence_level": "LOW",
+                "ml_available": False,
+                "ml_note": "ML model API unavailable"
+            }
+        
+        # Format the ML result for display
+        formatted = {
+            "model_used": "Phishing Evaluator (RF)",
+            "model_accuracy": "99.86%",
+            "model_roc_auc": "99.95%",
+            "model_description": "Custom URL-structure + text-feature extraction + Random Forest",
+            "threat_probability": ml_result.get("confidence", ml_result.get("prediction", 0)),
+            "prediction": ml_result.get("prediction", "unknown"),
+            "confidence_level": "HIGH" if ml_result.get("confidence", 0) > 0.8 else "MEDIUM" if ml_result.get("confidence", 0) > 0.5 else "LOW",
+            "ml_available": True
+        }
+        
+        # Add class probabilities if available
+        if "class_probabilities" in ml_result:
+            formatted["class_probabilities"] = ml_result["class_probabilities"]
+        
+        return formatted

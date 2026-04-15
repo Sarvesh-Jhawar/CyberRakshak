@@ -19,6 +19,11 @@ import {
   Paperclip,
   ClipboardList,
   ChevronRight,
+  FileImage,
+  X,
+  File as FileIcon,
+  Volume2,
+  VolumeX,
 } from "lucide-react"
 import Link from "next/link"
 import { api, getAuthHeaders, analyzeWithLlm } from "@/lib/api"
@@ -47,6 +52,17 @@ interface ChatMessage {
   summary?: any;
   question?: string;
   attachment?: string;
+  attachmentName?: string;
+  attachmentType?: 'image' | 'pdf' | 'docx' | 'executable' | 'file';
+  // Agent fields
+  ml_analysis?: any;
+  threat_verdict?: 'MALICIOUS' | 'BENIGN' | 'SUSPICIOUS';
+  risk_score?: number;
+  incident_id?: string;
+  routing_model?: string;
+  recommended_actions?: any;
+  reporting_protocol?: any;
+  related_playbook_id?: string | null;
 }
 
 // Add this interface to handle the SpeechRecognition API
@@ -68,6 +84,8 @@ export default function UserDashboard() {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [agentStatus, setAgentStatus] = useState<string>("Thinking...");
 
 
   const chatContainerRef = useRef<HTMLDivElement>(null)
@@ -132,21 +150,40 @@ export default function UserDashboard() {
     }
   }, [chatMessages, isAiTyping])
 
-  useEffect(() => {
-    if (attachment) {
-      handleSendMessage("", attachment);
-    }
-  }, [attachment]);
+  // Helper to detect file type from name
+  const getFileType = (file: File): 'image' | 'pdf' | 'docx' | 'executable' | 'file' => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) return 'image';
+    if (ext === 'pdf') return 'pdf';
+    if (['docx', 'doc'].includes(ext)) return 'docx';
+    if (['exe', 'dll', 'bat', 'cmd', 'msi', 'apk', 'sh', 'jar', 'ps1', 'vbs', 'scr', 'com'].includes(ext)) return 'executable';
+    return 'file';
+  };
 
-  const handleSendMessage = async (messageContent?: string, attachment?: File) => {
+  const getFileIcon = (type: string) => {
+    switch (type) {
+      case 'pdf': return '📄';
+      case 'docx': return '📝';
+      case 'image': return '🖼️';
+      case 'executable': return '⚠️';
+      default: return '📎';
+    }
+  };
+
+  const handleSendMessage = async (messageContent?: string, attachmentFile?: File) => {
     const textToSend = messageContent || message;
-    if (!textToSend.trim() && !attachment) return;
+    const fileToSend = attachmentFile || attachment;
+    if (!textToSend.trim() && !fileToSend) return;
+
+    const fileType = fileToSend ? getFileType(fileToSend) : undefined;
 
     const newUserMessage: ChatMessage = {
       id: Date.now(),
       role: "user",
-      content: textToSend,
-      attachment: attachment ? URL.createObjectURL(attachment) : undefined,
+      content: textToSend || (fileToSend ? `Sent ${fileToSend.name}` : ''),
+      attachment: fileToSend && fileType === 'image' ? URL.createObjectURL(fileToSend) : undefined,
+      attachmentName: fileToSend?.name,
+      attachmentType: fileType,
     };
     const updatedChatMessages = [...chatMessages, newUserMessage];
     setChatMessages(updatedChatMessages);
@@ -154,6 +191,7 @@ export default function UserDashboard() {
     setMessage("");
     setAttachment(null);
     setIsAiTyping(true);
+    setAgentStatus("Routing request...");
 
     try {
       const history: { role: 'user' | 'assistant'; content: string }[] = updatedChatMessages.slice(0, -1).map(msg => {
@@ -170,8 +208,21 @@ export default function UserDashboard() {
         return { role: 'user', content: msg.content };
       });
 
-      const result = await analyzeWithLlm(textToSend, history, attachment || undefined);
+      setAgentStatus("Analyzing context & synthesizing report...");
+      const result = await analyzeWithLlm(textToSend, history, fileToSend || undefined);
 
+      if (result.related_playbook_id && result.related_playbook_id !== 'null') {
+        // Play notification sound for playbook suggestion
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 660; osc.type = 'sine'; gain.gain.value = 0.1;
+        osc.start(); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        osc.stop(ctx.currentTime + 0.2);
+      }
+
+      // Build the AI message with all agent response fields
       const newAiMessage: ChatMessage = {
         id: Date.now() + 1,
         role: 'assistant',
@@ -189,6 +240,15 @@ export default function UserDashboard() {
         intent: result.intent,
         summary: result.summary,
         question: result.question,
+        // New agent-specific fields
+        ml_analysis: result.ml_analysis,
+        threat_verdict: result.threat_verdict,
+        risk_score: result.risk_score,
+        incident_id: result.incident_id,
+        routing_model: result.routing_model,
+        recommended_actions: result.recommended_actions,
+        reporting_protocol: result.reporting_protocol,
+        related_playbook_id: result.related_playbook_id || null,
       };
 
       if (result.intent === 'analyze_threat' && result.summary) {
@@ -201,6 +261,11 @@ export default function UserDashboard() {
       }
 
       setChatMessages((prev) => [...prev, newAiMessage]);
+
+      // ── Agentic AI: Auto-play TTS for general questions ──
+      if (result.intent === 'general_question' && result.answer) {
+        handleSpeak(`msg-${newAiMessage.id}`, result.answer);
+      }
     } catch (error: any) {
       console.error("[Analyze] Error:", error);
       toast.error("Analysis Error", { description: error.message });
@@ -231,6 +296,48 @@ export default function UserDashboard() {
     if (e.target.files && e.target.files[0]) {
       setAttachment(e.target.files[0]);
     }
+    // Reset the input so the same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handleRemoveAttachment = () => {
+    setAttachment(null);
+  };
+
+  // ── Text-to-Speech helpers ──
+  const handleSpeak = (id: string, text: string) => {
+    if (speakingId === id) {
+      handleStopSpeaking();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.onend = () => setSpeakingId(null);
+    setSpeakingId(id);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleStopSpeaking = () => {
+    window.speechSynthesis.cancel();
+    setSpeakingId(null);
+  };
+
+  // Playbook label map for button text
+  const PLAYBOOK_LABELS: Record<string, string> = {
+    'phishing': '🎣 Phishing Attack Response',
+    'malware': '🐛 Malware Detection & Removal',
+    'fraud': '💳 Fraud Prevention & Response',
+    'espionage': '👁 Espionage Threat Response',
+    'opsec': '🔒 OPSEC Risk Mitigation',
+    'social-engineering': '👥 Social Engineering Defense',
+    'deepfake': '🤖 Deepfake Attack Response',
+    'insider-threats': '🕵 Insider Threat Protocol',
+    'network-intrusion': '🌐 Network Intrusion Response',
+    'dos-ddos': '💥 DoS/DDoS Attack Mitigation',
+    'zero-day': '💣 Zero-Day Exploit Response',
+    'fake-website': '📋 Fake Website / Cloned App Response',
   };
 
   const handleNewChat = () => {
@@ -332,7 +439,8 @@ export default function UserDashboard() {
                   >
                     <div className="text-sm prose dark:prose-invert">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      {msg.attachment && (
+                      {/* Image attachment preview */}
+                      {msg.attachment && msg.attachmentType === 'image' && (
                         <Image
                           src={msg.attachment}
                           alt="Attachment"
@@ -341,22 +449,110 @@ export default function UserDashboard() {
                           className="mt-2 rounded-lg"
                         />
                       )}
+                      {/* Non-image file attachment badge */}
+                      {msg.attachmentName && msg.attachmentType !== 'image' && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-background/60 border border-border/50 text-xs">
+                          <span>{getFileIcon(msg.attachmentType || 'file')}</span>
+                          <span className="font-medium truncate max-w-[180px]">{msg.attachmentName}</span>
+                        </div>
+                      )}
                     </div>
-                    {/* Threat detected: show rich card + Auto File Complaint button */}
+                    {/* Threat detected: show rich card + ML evidence + Auto File Complaint button */}
                     {msg.role === 'assistant' && (msg.intent === 'analyze_threat' || msg.intent === 'complaint_ready') && msg.analysis && (
                       <div className="mt-3 space-y-3">
-                        {/* Threat Summary Card */}
+                        {/* ── Verdict Header ── */}
                         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">⚠ Threat Detected</span>
-                            <Badge variant={msg.analysis.severity?.toLowerCase() === 'critical' || msg.analysis.severity?.toLowerCase() === 'high' ? 'destructive' : 'default'} className="text-xs">
-                              {msg.analysis.severity || 'Unknown'}
-                            </Badge>
+                            <div className="flex items-center gap-1.5">
+                              {(msg as any).threat_verdict && (
+                                <Badge
+                                  variant={(msg as any).threat_verdict === 'MALICIOUS' ? 'destructive' : 'default'}
+                                  className="text-xs font-bold"
+                                >
+                                  {(msg as any).threat_verdict}
+                                </Badge>
+                              )}
+                              <Badge variant={msg.analysis.severity?.toLowerCase() === 'critical' || msg.analysis.severity?.toLowerCase() === 'high' ? 'destructive' : 'default'} className="text-xs">
+                                {msg.analysis.severity || 'Unknown'}
+                              </Badge>
+                            </div>
                           </div>
                           <p className="text-xs text-foreground/80"><strong>Category:</strong> {msg.analysis.ui_labels?.category || '—'}</p>
                           <p className="text-xs text-foreground/80"><strong>Summary:</strong> {msg.analysis.detection_summary}</p>
                           <p className="text-xs text-amber-300"><strong>Action:</strong> {msg.analysis.user_alert}</p>
+                          {(msg as any).incident_id && (
+                            <p className="text-xs text-muted-foreground font-mono">🔖 Incident: {(msg as any).incident_id}</p>
+                          )}
                         </div>
+
+                        {/* ── ML Mathematical Evidence ── */}
+                        {(msg as any).ml_analysis && (
+                          <div className="rounded-lg border border-blue-500/40 bg-blue-500/10 p-3 space-y-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-semibold text-blue-400 uppercase tracking-wide">🎯 ML Mathematical Evidence</span>
+                              {(msg as any).ml_analysis.ml_available ? (
+                                <Badge variant="outline" className="text-xs border-blue-500/50 text-blue-400">Model Active</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs border-yellow-500/50 text-yellow-400">LLM-Only</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-foreground/80">
+                              <strong>Model:</strong> {(msg as any).ml_analysis.model_used}
+                            </p>
+                            <p className="text-xs text-foreground/80">
+                              <strong>Prediction:</strong>{' '}
+                              <span className={`font-semibold ${(msg as any).ml_analysis.prediction === 'benign' || (msg as any).ml_analysis.prediction === 'legitimate' ? 'text-green-400' : 'text-red-400'}`}>
+                                {((msg as any).ml_analysis.prediction || 'N/A').toUpperCase()}
+                              </span>
+                            </p>
+                            {/* Threat Probability Bar */}
+                            {(msg as any).ml_analysis.threat_probability !== undefined && (
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-xs text-foreground/70">
+                                  <span><strong>Threat Probability</strong></span>
+                                  <span className="font-mono font-bold">
+                                    {(((msg as any).ml_analysis.threat_probability || 0) * 100).toFixed(1)}%
+                                  </span>
+                                </div>
+                                <div className="w-full bg-slate-700 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full transition-all ${
+                                      ((msg as any).ml_analysis.threat_probability || 0) > 0.7
+                                        ? 'bg-red-500'
+                                        : ((msg as any).ml_analysis.threat_probability || 0) > 0.4
+                                        ? 'bg-yellow-500'
+                                        : 'bg-green-500'
+                                    }`}
+                                    style={{ width: `${Math.round(((msg as any).ml_analysis.threat_probability || 0) * 100)}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {/* Risk Score */}
+                            {(msg as any).risk_score !== undefined && (
+                              <div className="flex items-center justify-between pt-1 border-t border-blue-500/20">
+                                <span className="text-xs text-foreground/70"><strong>Risk Score</strong></span>
+                                <span className={`text-sm font-bold font-mono ${
+                                  (msg as any).risk_score > 7 ? 'text-red-400'
+                                  : (msg as any).risk_score > 4 ? 'text-yellow-400'
+                                  : 'text-green-400'
+                                }`}>
+                                  {(msg as any).risk_score}/10
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between text-xs text-foreground/60 pt-1">
+                              <span>Accuracy: {(msg as any).ml_analysis.model_accuracy}</span>
+                              {(msg as any).ml_analysis.model_roc_auc !== 'N/A' && (
+                                <span>ROC-AUC: {(msg as any).ml_analysis.model_roc_auc}</span>
+                              )}
+                            </div>
+                            {(msg as any).ml_analysis.ml_note && (
+                              <p className="text-xs text-yellow-400/80 italic">{(msg as any).ml_analysis.ml_note}</p>
+                            )}
+                          </div>
+                        )}
 
                         {/* Auto File Complaint Button */}
                         <Button
@@ -371,21 +567,92 @@ export default function UserDashboard() {
                         <p className="text-xs text-muted-foreground text-center">All fields will be pre-filled — just review and submit</p>
                       </div>
                     )}
+
+                    {/* ── Agentic: Playbook Button + Read Aloud for general_question ── */}
+                    {msg.role === 'assistant' && msg.intent === 'general_question' && (
+                      <div className="mt-3 space-y-2">
+                        {/* Read Aloud Button */}
+                        <button
+                          onClick={() => handleSpeak(`msg-${msg.id}`, msg.content)}
+                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 border ${
+                            speakingId === `msg-${msg.id}`
+                              ? 'bg-purple-100 border-purple-300 text-purple-700 animate-pulse'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-600'
+                          }`}
+                        >
+                          {speakingId === `msg-${msg.id}` ? (
+                            <><VolumeX className="h-3.5 w-3.5" /> Stop Reading</>
+                          ) : (
+                            <><Volume2 className="h-3.5 w-3.5" /> 🔊 Read Aloud</>
+                          )}
+                        </button>
+
+                        {/* Playbook Navigation Button */}
+                        {msg.related_playbook_id && msg.related_playbook_id !== 'null' && (
+                          <button
+                            onClick={() => {
+                              // Play a short alert sound
+                              const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                              const osc = ctx.createOscillator();
+                              const gain = ctx.createGain();
+                              osc.connect(gain);
+                              gain.connect(ctx.destination);
+                              osc.frequency.value = 880;
+                              osc.type = 'sine';
+                              gain.gain.value = 0.15;
+                              osc.start();
+                              gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+                              osc.stop(ctx.currentTime + 0.3);
+                              // Navigate to playbook
+                              router.push(`/user-dashboard/playbook?highlight=${msg.related_playbook_id}`);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.98] group"
+                          >
+                            <BookOpen className="h-4 w-4 group-hover:animate-bounce" />
+                            <span className="flex-1 text-left">
+                              {PLAYBOOK_LABELS[msg.related_playbook_id] || '📋 View Security Playbook'}
+                            </span>
+                            <ChevronRight className="h-4 w-4 opacity-60 group-hover:translate-x-1 transition-transform" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
 
               {isAiTyping && (
                 <div className="flex justify-start">
-                  <div className="bg-muted text-muted-foreground p-3 rounded-lg">
-                    <div className="flex items-center space-x-2">
-                      <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
-                      <span className="text-sm">Generating response...</span>
+                  <div className="bg-muted text-muted-foreground p-3 rounded-lg border border-primary/20 shadow-sm shadow-primary/5">
+                    <div className="flex items-center space-x-3">
+                      <div className="relative h-5 w-5">
+                        <div className="absolute inset-0 animate-ping rounded-full bg-primary/20 opacity-75"></div>
+                        <div className="relative animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-foreground tracking-tight">Sudarshan Chakra AI</span>
+                        <span className="text-[10px] text-muted-foreground font-mono animate-pulse">{agentStatus}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
+
+            {/* Attachment Preview Bar */}
+            {attachment && (
+              <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                <span className="text-base">{getFileIcon(getFileType(attachment))}</span>
+                <span className="text-sm font-medium text-blue-800 truncate flex-1">{attachment.name}</span>
+                <span className="text-xs text-blue-500">{(attachment.size / 1024).toFixed(0)} KB</span>
+                <button
+                  onClick={handleRemoveAttachment}
+                  className="p-0.5 rounded-full hover:bg-blue-200 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5 text-blue-600" />
+                </button>
+              </div>
+            )}
 
             {/* Input Area */}
             <div className="relative">
@@ -395,7 +662,7 @@ export default function UserDashboard() {
                   placeholder="Describe your cybersecurity issue..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage(message, attachment ?? undefined)}
+                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage(message)}
                   className="pr-10 bg-white border-slate-300 focus-visible:border-primary focus-visible:ring-primary/20"
                 />
                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -404,7 +671,7 @@ export default function UserDashboard() {
                     id="file-upload"
                     className="hidden"
                     onChange={handleAttachmentChange}
-                    accept="image/*"
+                    accept="image/*,.pdf,.docx,.doc,.exe,.dll,.bat,.cmd,.msi,.apk,.sh,.jar,.ps1,.vbs,.scr,.txt,.csv,.log,.json,.xml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/x-msdownload,application/octet-stream"
                   />
                   <label htmlFor="file-upload">
                     <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-200" asChild>
@@ -414,7 +681,7 @@ export default function UserDashboard() {
                 </div>
               </div>
               <Button 
-                onClick={() => handleSendMessage(message, attachment ?? undefined)} 
+                onClick={() => handleSendMessage(message)} 
                 disabled={!message.trim() && !attachment || isAiTyping}
                 className="shrink-0"
               >

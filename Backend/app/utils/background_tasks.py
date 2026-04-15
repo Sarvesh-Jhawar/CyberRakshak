@@ -101,7 +101,7 @@ class EmailSyncService:
                         body_preview=email_details.get('body', '')[:200],
                         phishing_score=str(analysis.get('phishing_score', 0)),
                         threat_level=analysis.get('threat_level'),
-                        ml_analysis=analysis.get('ml_analysis'),
+                        ml_analysis=analysis.get('ml_analysis'),  # Now contains both ML and LLM analysis
                         is_read=False,
                         created_at=datetime.utcnow(),
                         updated_at=datetime.utcnow()

@@ -16,13 +16,23 @@ import { api } from "@/lib/api"
 export default function ComplaintPage() {
   const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
-    title: searchParams.get("title") || "",
-    category: searchParams.get("category") || "",
-    description: searchParams.get("description") || "",
-    evidenceType: searchParams.get("evidenceType") || "",
-    evidenceText: searchParams.get("evidenceText") || "",
-    evidenceUrl: searchParams.get("evidenceUrl") || "",
+    title: "",
+    category: "",
+    description: "",
+    evidenceType: "",
+    evidenceText: "",
+    evidenceUrl: "",
   })
+  const [animatedData, setAnimatedData] = useState({
+    title: "",
+    category: "",
+    description: "",
+    evidenceType: "",
+    evidenceText: "",
+    evidenceUrl: "",
+  })
+  const [currentField, setCurrentField] = useState<string | null>(null)
+  const [isAnimating, setIsAnimating] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -45,6 +55,77 @@ export default function ComplaintPage() {
     { value: "audio", label: "Audio", icon: Mic },
     { value: "file", label: "File Upload", icon: Upload },
   ]
+
+  // Animation function
+  const animateField = (field: string, targetValue: string, delay: number = 0) => {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        setCurrentField(field)
+        
+        // For select fields, just highlight and set instantly
+        if (field === "category" || field === "evidenceType") {
+          setAnimatedData(prev => ({
+            ...prev,
+            [field]: targetValue
+          }))
+          setTimeout(() => {
+            setCurrentField(null)
+            resolve()
+          }, 800) // Highlight for 800ms
+        } else {
+          // For text fields, animate character by character
+          let index = 0
+          const interval = setInterval(() => {
+            if (index < targetValue.length) {
+              setAnimatedData(prev => ({
+                ...prev,
+                [field]: targetValue.slice(0, index + 1)
+              }))
+              index++
+            } else {
+              clearInterval(interval)
+              setCurrentField(null)
+              resolve()
+            }
+          }, 50) // 50ms per character
+        }
+      }, delay)
+    })
+  }
+
+  // Start animation when component mounts with autofill data
+  useEffect(() => {
+    const title = searchParams.get("title") || ""
+    const category = searchParams.get("category") || ""
+    const description = searchParams.get("description") || ""
+    const evidenceType = searchParams.get("evidenceType") || ""
+    const evidenceText = searchParams.get("evidenceText") || ""
+    const evidenceUrl = searchParams.get("evidenceUrl") || ""
+
+    if (title || category || description || evidenceType || evidenceText || evidenceUrl) {
+      setIsAnimating(true)
+      const animateSequence = async () => {
+        if (title) await animateField("title", title, 500)
+        if (category) await animateField("category", category, 300)
+        if (description) await animateField("description", description, 300)
+        if (evidenceType) await animateField("evidenceType", evidenceType, 300)
+        if (evidenceText) await animateField("evidenceText", evidenceText, 300)
+        if (evidenceUrl) await animateField("evidenceUrl", evidenceUrl, 300)
+        
+        // Update actual form data
+        setFormData({
+          title,
+          category,
+          description,
+          evidenceType,
+          evidenceText,
+          evidenceUrl,
+        })
+        setIsAnimating(false)
+      }
+      animateSequence()
+    }
+  }, [searchParams])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -160,6 +241,12 @@ export default function ComplaintPage() {
             <CardDescription>
               Provide detailed information about the cybersecurity incident. All fields marked with * are required.
             </CardDescription>
+            {isAnimating && (
+              <div className="flex items-center space-x-2 text-primary text-sm">
+                <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+                <span>AI Assistant is filling the form...</span>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -170,17 +257,22 @@ export default function ComplaintPage() {
                   id="title"
                   name="title"
                   placeholder="e.g., Suspicious Email from External Source"
-                  value={formData.title}
+                  value={isAnimating ? animatedData.title : formData.title}
                   onChange={handleInputChange}
                   required
+                  className={currentField === "title" ? "ring-2 ring-primary ring-opacity-50 border-primary" : ""}
                 />
               </div>
 
               {/* Category Selection */}
               <div className="space-y-2">
                 <Label htmlFor="category">Incident Category *</Label>
-                <Select value={formData.category} onValueChange={(value) => handleSelectChange("category", value)} required>
-                  <SelectTrigger>
+                <Select 
+                  value={isAnimating ? animatedData.category : formData.category} 
+                  onValueChange={(value) => handleSelectChange("category", value)} 
+                  required
+                >
+                  <SelectTrigger className={currentField === "category" ? "ring-2 ring-primary ring-opacity-50 border-primary" : ""}>
                     <SelectValue placeholder="Select the type of incident" />
                   </SelectTrigger>
                   <SelectContent>
@@ -200,9 +292,9 @@ export default function ComplaintPage() {
                   id="description"
                   name="description"
                   placeholder="Provide a detailed description of the incident, including when it occurred, what happened, and any immediate actions taken..."
-                  value={formData.description}
+                  value={isAnimating ? animatedData.description : formData.description}
                   onChange={handleInputChange}
-                  className="min-h-[120px]"
+                  className={`min-h-[120px] ${currentField === "description" ? "ring-2 ring-primary ring-opacity-50 border-primary" : ""}`}
                   required
                 />
               </div>
@@ -210,8 +302,8 @@ export default function ComplaintPage() {
               {/* Evidence Type */}
               <div className="space-y-2">
                 <Label htmlFor="evidenceType">Evidence Type</Label>
-                <Select onValueChange={(value) => handleSelectChange("evidenceType", value)}>
-                  <SelectTrigger>
+                <Select value={isAnimating ? animatedData.evidenceType : formData.evidenceType} onValueChange={(value) => handleSelectChange("evidenceType", value)}>
+                  <SelectTrigger className={currentField === "evidenceType" ? "ring-2 ring-primary ring-opacity-50 border-primary" : ""}>
                     <SelectValue placeholder="Select the type of evidence you want to provide" />
                   </SelectTrigger>
                   <SelectContent>
@@ -231,33 +323,34 @@ export default function ComplaintPage() {
               </div>
 
               {/* Evidence Input - Dynamic based on type */}
-              {formData.evidenceType && (
+              {(isAnimating ? animatedData.evidenceType : formData.evidenceType) && (
                 <div className="space-y-2">
                   <Label htmlFor="evidence">Evidence</Label>
-                  {formData.evidenceType === "text" && (
+                  {(isAnimating ? animatedData.evidenceType : formData.evidenceType) === "text" && (
                     <Textarea
                       id="evidenceText"
                       name="evidenceText"
                       placeholder="Provide additional text evidence or details..."
-                      value={formData.evidenceText}
+                      value={isAnimating ? animatedData.evidenceText : formData.evidenceText}
                       onChange={handleInputChange}
-                      className="min-h-[80px]"
+                      className={`min-h-[80px] ${currentField === "evidenceText" ? "ring-2 ring-primary ring-opacity-50 border-primary" : ""}`}
                     />
                   )}
-                  {formData.evidenceType === "url" && (
+                  {(isAnimating ? animatedData.evidenceType : formData.evidenceType) === "url" && (
                     <Input
                       id="evidenceUrl"
                       name="evidenceUrl"
                       type="url"
                       placeholder="https://suspicious-website.com"
-                      value={formData.evidenceUrl}
+                      value={isAnimating ? animatedData.evidenceUrl : formData.evidenceUrl}
                       onChange={handleInputChange}
+                      className={currentField === "evidenceUrl" ? "ring-2 ring-primary ring-opacity-50 border-primary" : ""}
                     />
                   )}
-                  {(formData.evidenceType === "image" ||
-                    formData.evidenceType === "video" ||
-                    formData.evidenceType === "audio" ||
-                    formData.evidenceType === "file") && (
+                  {((isAnimating ? animatedData.evidenceType : formData.evidenceType) === "image" ||
+                    (isAnimating ? animatedData.evidenceType : formData.evidenceType) === "video" ||
+                    (isAnimating ? animatedData.evidenceType : formData.evidenceType) === "audio" ||
+                    (isAnimating ? animatedData.evidenceType : formData.evidenceType) === "file") && (
                     <div className="border-2 border-dashed border-border rounded-lg p-6">
                       <div className="text-center">
                         <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
@@ -308,8 +401,8 @@ export default function ComplaintPage() {
                 <Button type="button" variant="outline" onClick={() => router.back()}>
                   Cancel
                 </Button>
-                <Button type="submit" className="cyber-glow" disabled={isSubmitting}>
-                  {isSubmitting ? "Submitting..." : "Submit Complaint"}
+                <Button type="submit" className="cyber-glow" disabled={isSubmitting || isAnimating}>
+                  {isSubmitting ? "Submitting..." : isAnimating ? "AI Filling Form..." : "Submit Complaint"}
                 </Button>
               </div>
             </form>

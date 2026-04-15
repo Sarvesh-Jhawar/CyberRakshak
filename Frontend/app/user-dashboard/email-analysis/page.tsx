@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { api, getAuthHeaders } from "@/lib/api"
+import { EmailMLAnalysis } from "@/components/email-ml-analysis";
 import { GmailConnect } from "@/components/gmail-connect"
+import { useRouter } from "next/navigation"
 
 interface Email {
   id: string
@@ -25,13 +27,14 @@ interface Email {
     severity: "low" | "medium" | "high"
   }>
   ml_analysis?: {
-    prediction?: number
-    confidence?: number
+    ml_analysis?: any; // The formatted ML model results
+    llm_analysis?: any; // The LLM contextual analysis
     threat_indicators?: Array<{
-      type: string
-      description: string
-      severity: string
-    }>
+      type: string;
+      description: string;
+      severity: string;
+    }>;
+    features_extracted?: any;
   }
 }
 
@@ -56,6 +59,22 @@ export default function EmailAnalysisPage() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
   const [threatFilter, setThreatFilter] = useState<string | null>(null)
   const { toast } = useToast()
+  const router = useRouter()
+
+  const handleFileComplaint = (email: Email) => {
+    const subject = email.subject || "Suspicious Email"
+    const from = email.from_address || "Unknown Sender"
+    const score = email.phishing_score?.toFixed(1) ?? "N/A"
+    const level = email.threat_level?.toUpperCase() ?? "UNKNOWN"
+    const params = new URLSearchParams({
+      title: `Phishing Email Report: ${subject}`,
+      category: "phishing",
+      description: `A ${level} email was detected by CyberRakshak's AI analysis.\n\nSender: ${from}\nSubject: ${subject}\nPhishing Score: ${score}/100\nThreat Level: ${level}\n\nPlease investigate this email and take appropriate action.`,
+      evidenceType: "text",
+      evidenceText: `Email from ${from} with subject "${subject}" scored ${score}/100 on the phishing scale.`,
+    })
+    router.push(`/user-dashboard/complaint?${params.toString()}`)
+  }
 
   useEffect(() => {
     checkGmailStatus()
@@ -321,25 +340,36 @@ export default function EmailAnalysisPage() {
             )}
 
             {selectedEmail.ml_analysis && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm font-medium text-blue-900 mb-2">Analysis Details:</p>
-                <div className="space-y-2 text-sm text-blue-800">
-                  {selectedEmail.ml_analysis.threat_indicators?.map(
-                    (indicator: any, idx: number) => (
-                      <div key={idx} className="flex items-start gap-2">
-                        <span className="font-semibold min-w-fit">
-                          {indicator.severity === "high" ? "🔴" : "🟡"}
-                        </span>
-                        <div>
-                          <p className="font-medium">{indicator.type}</p>
-                          <p className="text-xs">{indicator.description}</p>
-                        </div>
-                      </div>
-                    )
-                  ) || <p>No threat indicators identified</p>}
-                </div>
-              </div>
+              <EmailMLAnalysis
+                mlAnalysis={selectedEmail.ml_analysis?.ml_analysis || selectedEmail.ml_analysis}
+                phishingScore={selectedEmail.phishing_score}
+                threatLevel={selectedEmail.threat_level}
+                llmAnalysis={selectedEmail.ml_analysis?.llm_analysis}
+              />
             )}
+
+            {/* File a Complaint Button */}
+            <div className="pt-4 border-t border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Report this email as a security incident</p>
+                  <p className="text-xs text-gray-500 mt-0.5">AI will pre-fill the complaint form with email details</p>
+                </div>
+                <Button
+                  onClick={() => handleFileComplaint(selectedEmail)}
+                  className={`flex items-center gap-2 ${
+                    selectedEmail.threat_level === "malicious"
+                      ? "bg-red-600 hover:bg-red-700 text-white"
+                      : selectedEmail.threat_level === "suspicious"
+                      ? "bg-yellow-500 hover:bg-yellow-600 text-white"
+                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                  }`}
+                >
+                  <span>🚨</span>
+                  File a Complaint
+                </Button>
+              </div>
+            </div>
           </div>
         </Card>
       ) : (
@@ -363,8 +393,9 @@ export default function EmailAnalysisPage() {
                     </div>
                     <p className="text-sm text-gray-600 mt-1">From: {email.from_address}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {new Date(email.created_at).toLocaleDateString()} at{" "}
-                      {new Date(email.created_at).toLocaleTimeString()}
+                      {email.created_at
+                        ? `${new Date(email.created_at).toLocaleDateString()} at ${new Date(email.created_at).toLocaleTimeString()}`
+                        : "Unknown date"}
                     </p>
                   </div>
                   <div className="text-right space-y-2">
