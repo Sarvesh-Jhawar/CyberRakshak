@@ -136,7 +136,7 @@ When CyberRakshak successfully synthesizes an incident, the user receives an act
 * **🔎 Threat Verdict:** A clear "Malicious" or "Benign" decision.
 * **🛠️ Contextual Breakdown:** *Why* the system believes it is malicious (powered by the LLM).
 * **🛡️ Preventative Steps:** Immediate, tailored action items to quarantine the threat or secure the network.
-* **📞 Reporting Protocol:** Direct guidance on how and where to file an official cyber complaint or incident report based on the vector
+* **📞 Reporting Protocol:** Direct guidance on how and where to file an official cyber complaint or incident report based on the vector.
 
 ---
 <div align="center">
