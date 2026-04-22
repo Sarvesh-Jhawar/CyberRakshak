@@ -31,11 +31,6 @@ if not exist "Backend\.env" (
     pause
 )
 
-if not exist "Backend\serviceAccountKey.json" (
-    echo [WARNING] Backend\serviceAccountKey.json not found! 
-    echo Firebase features may not work.
-)
-
 echo.
 echo [1/3] Installing Backend & ML Dependencies...
 :: Using --quiet to keep the screen clean for the user
