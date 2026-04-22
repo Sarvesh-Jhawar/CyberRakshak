@@ -24,6 +24,19 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
+echo [0/3] Checking configuration files...
+if not exist "Backend\.env" (
+    echo [WARNING] Backend\.env not found! 
+    echo Please copy Backend\env.example to Backend\.env and configure it.
+    pause
+)
+
+if not exist "Backend\serviceAccountKey.json" (
+    echo [WARNING] Backend\serviceAccountKey.json not found! 
+    echo Firebase features may not work.
+)
+
+echo.
 echo [1/3] Installing Backend & ML Dependencies...
 :: Using --quiet to keep the screen clean for the user
 pip install -r Backend/requirements.txt --quiet
