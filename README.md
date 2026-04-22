@@ -30,15 +30,17 @@ Instead of requiring security teams to manually parse malicious files, URLs, or 
 
 ---
 
-## 📁 Project Structure & Documentation
+## 📁 Interactive Project Navigator
 
-For more detailed information on specific components, refer to their dedicated documentation:
+Explore the project structure and technical documentation by clicking the folders below:
 
-- **[Backend Documentation](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/Backend/README.md)**: API architecture, database schema, and security protocols.
-- **[Frontend Documentation](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/Frontend/README.md)**: UI components, dashboard design, and state management.
-- **[Machine Learning Documentation](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/models/README.md)**: Model training details, datasets, and performance metrics.
-- **[LLM Orchestration Layer](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/llm/README.md)**: Logic for AI-agent routing and incident synthesis.
-- **[Technical Journey](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/DEVELOPMENT_JOURNEY.md)**: A stepwise procedure of how the project was built.
+*   **[📂 Backend](./Backend/)**: Core FastAPI logic, PostgreSQL integration, and security protocols.
+*   **[📂 Frontend](./Frontend/)**: Next.js 14 Dashboard, Chat UI, and specialized components.
+*   **[📂 Machine Learning](./models/)**: The heart of the intelligence layer (5 specialized threat models).
+*   **[📂 LLM Layer](./llm/)**: AI Orchestration, intent routing, and synthesis logic.
+
+### 📑 Technical Documentation
+*   **[📝 Technical Journey](./DEVELOPMENT_JOURNEY.md)**: A detailed, stepwise procedure on how this project was built.
 
 ---
 
