@@ -100,7 +100,7 @@ export function UserLayout({ children }: UserLayoutProps) {
               <ThreatGuardLogo variant="sidebar" />
               <div>
                 <h1 className="text-lg font-bold text-sidebar-foreground">ThreatGuard</h1>
-                <p className="text-xs text-sidebar-foreground/70">Cyber Safety</p>
+                <p className="text-xs text-sidebar-foreground/60">Cyber Safety</p>
               </div>
             </div>
             <Button variant="ghost" size="sm" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
@@ -118,7 +118,7 @@ export function UserLayout({ children }: UserLayoutProps) {
                   "flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 border-l-4 border-l-transparent",
                   isActive(item.href)
                     ? "bg-primary text-primary-foreground shadow-sm border-l-primary"
-                    : "text-slate-700 hover:bg-blue-100 hover:text-blue-800 hover:border-l-primary"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground hover:border-l-primary"
                 )}
                 onClick={() => setSidebarOpen(false)}
               >
@@ -149,7 +149,7 @@ export function UserLayout({ children }: UserLayoutProps) {
               variant="outline"
               size="sm"
               onClick={handleLogout}
-              className="w-full justify-start text-slate-700 hover:bg-red-50 hover:text-red-700"
+              className="w-full justify-start text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive border-sidebar-border"
             >
               <LogOut className="h-4 w-4 mr-2" />
               Logout

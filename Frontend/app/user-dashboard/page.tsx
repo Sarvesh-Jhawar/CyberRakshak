@@ -24,7 +24,10 @@ import {
   File as FileIcon,
   Volume2,
   VolumeX,
+  Clock,
+  Download,
 } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { api, getAuthHeaders, analyzeWithLlm } from "@/lib/api"
 import { isMockAuthEnabled } from "@/lib/mockAuth"
@@ -47,6 +50,7 @@ interface ChatMessage {
   id: number;
   role: 'user' | 'assistant';
   content: string;
+  timestamp: string;
   analysis?: any;
   intent?: 'analyze_threat' | 'general_question' | 'request_information' | 'complaint_ready';
   summary?: any;
@@ -181,6 +185,7 @@ export default function UserDashboard() {
       id: Date.now(),
       role: "user",
       content: textToSend || (fileToSend ? `Sent ${fileToSend.name}` : ''),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       attachment: fileToSend && fileType === 'image' ? URL.createObjectURL(fileToSend) : undefined,
       attachmentName: fileToSend?.name,
       attachmentType: fileType,
@@ -227,6 +232,7 @@ export default function UserDashboard() {
         id: Date.now() + 1,
         role: 'assistant',
         content: result.answer || result.response || result.question || result.message || '',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         analysis: result.intent === 'complaint_ready' || result.intent === 'analyze_threat' ? {
           detection_summary: result.detection_summary,
           user_alert: result.user_alert,
@@ -273,6 +279,7 @@ export default function UserDashboard() {
         id: Date.now() + 1,
         role: 'assistant',
         content: "Sorry, I encountered an error and couldn't process your request. Please try again.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setChatMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -322,6 +329,67 @@ export default function UserDashboard() {
   const handleStopSpeaking = () => {
     window.speechSynthesis.cancel();
     setSpeakingId(null);
+  };
+
+  // ── Speech-to-Text (Voice Input) helpers ──
+  const toggleRecording = () => {
+    if (isRecording) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Speech Recognition Not Supported", {
+        description: "Your browser does not support the Web Speech API. Please try Chrome or Edge."
+      });
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+      toast.info("Listening...", { description: "Speak your security concern clearly." });
+    };
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+
+      if (finalTranscript) {
+        setMessage(prev => prev + (prev ? ' ' : '') + finalTranscript);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event.error);
+      setIsRecording(false);
+      if (event.error !== 'no-speech') {
+        toast.error("Recognition Error", { description: event.error });
+      }
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
   };
 
   // Playbook label map for button text
@@ -414,224 +482,250 @@ export default function UserDashboard() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
-            {/* Chat Messages */}
-            <div ref={chatContainerRef} className="space-y-4 mb-6 h-96 overflow-y-auto p-2">
+          <CardContent className="p-0">
+            {/* Chat Messages Container */}
+            <div 
+              ref={chatContainerRef} 
+              className="space-y-6 h-[500px] overflow-y-auto px-6 py-8 bg-muted/10 scroll-smooth"
+            >
               {chatMessages.length === 0 && (
-                <div className="text-center py-8">
-                  <Image
-                    src="/model logo.png"
-                    alt="Model Logo"
-                    width={48}
-                    height={48}
-                    className="mx-auto mb-4"
-                  />
-                  <p className="text-muted-foreground">What's your cybersecurity concern today?</p>
+                <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+                  <div className="p-4 rounded-full bg-card shadow-sm border border-border">
+                    <Image
+                      src="/model logo.png"
+                      alt="Model Logo"
+                      width={64}
+                      height={64}
+                      className="opacity-80"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-lg font-bold text-foreground tracking-tight">How can I help you today?</p>
+                    <p className="text-sm text-muted-foreground max-w-[280px]">Describe a cybersecurity concern, analyze a file, or ask an educational question.</p>
+                  </div>
                 </div>
               )}
 
               {chatMessages.map((msg) => (
-                <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div
-                    className={`max-w-[80%] p-3 rounded-lg ${
-                      msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    <div className="text-sm prose dark:prose-invert">
-                      <ReactMarkdown>{msg.content}</ReactMarkdown>
-                      {/* Image attachment preview */}
+                <div key={msg.id} className={`flex w-full ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] sm:max-w-[75%] flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    
+                    {/* Role & Timestamp UI */}
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <span className={`text-[10px] font-black uppercase tracking-[0.15em] ${msg.role === 'user' ? 'text-primary' : 'text-muted-foreground'}`}>
+                        {msg.role === 'user' ? 'Direct Input' : 'Sudarshan Chakra AI'}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/60 font-medium flex items-center gap-1">
+                        <Clock className="h-2.5 w-2.5" />
+                        {msg.timestamp}
+                      </span>
+                    </div>
+
+                    <div
+                      className={`relative p-5 rounded-2xl shadow-sm border transition-all duration-300 ${
+                        msg.role === "user" 
+                          ? "bg-primary text-primary-foreground border-primary/10 rounded-tr-none" 
+                          : "bg-card text-foreground border-border rounded-tl-none hover:shadow-md"
+                      }`}
+                    >
+                      {/* Multimedia: Image Preview */}
                       {msg.attachment && msg.attachmentType === 'image' && (
-                        <Image
-                          src={msg.attachment}
-                          alt="Attachment"
-                          width={200}
-                          height={200}
-                          className="mt-2 rounded-lg"
-                        />
+                        <div className="mb-4 overflow-hidden rounded-xl border border-black/5 bg-muted shadow-inner group">
+                          <Image
+                            src={msg.attachment}
+                            alt="Analyzed Media"
+                            width={500}
+                            height={400}
+                            className="w-full h-auto object-cover group-hover:scale-[1.03] transition-transform duration-500"
+                          />
+                        </div>
                       )}
-                      {/* Non-image file attachment badge */}
+
+                      {/* Message Text: Preserve formatting for User, Markdown for AI */}
+                      <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'whitespace-pre-wrap font-medium' : 'prose prose-slate prose-sm max-w-none'}`}>
+                        {msg.role === 'user' ? (
+                          msg.content
+                        ) : (
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        )}
+                      </div>
+
+                      {/* Multimedia: File Attachment Card */}
                       {msg.attachmentName && msg.attachmentType !== 'image' && (
-                        <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-background/60 border border-border/50 text-xs">
-                          <span>{getFileIcon(msg.attachmentType || 'file')}</span>
-                          <span className="font-medium truncate max-w-[180px]">{msg.attachmentName}</span>
+                        <div className={`mt-4 p-4 rounded-xl border flex items-center gap-4 transition-all ${
+                          msg.role === 'user' 
+                            ? 'bg-white/10 border-white/20 text-white' 
+                            : 'bg-muted/50 border-border text-foreground'
+                        }`}>
+                          <div className="h-12 w-12 rounded-xl bg-background/20 flex items-center justify-center text-2xl shadow-sm border border-black/5">
+                            {getFileIcon(msg.attachmentType || 'file')}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black truncate tracking-tight">{msg.attachmentName}</p>
+                            <p className="text-[9px] opacity-60 font-bold uppercase tracking-widest mt-0.5">{msg.attachmentType || 'System File'}</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className={`h-9 w-9 rounded-full ${msg.role === 'user' ? 'hover:bg-white/10' : 'hover:bg-muted'}`} 
+                            asChild
+                          >
+                            <a href={msg.attachment} download={msg.attachmentName}>
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Threat Analysis Components (Agentic Overlays) */}
+                      {msg.role === 'assistant' && (msg.intent === 'analyze_threat' || msg.intent === 'complaint_ready') && msg.analysis && (
+                        <div className="mt-5 space-y-4 pt-5 border-t border-border">
+                          {/* Threat Header */}
+                          <div className="rounded-xl border border-rose-500/20 bg-rose-50/10 dark:bg-rose-950/20 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                                <AlertTriangle className="h-3 w-3" />
+                                Threat Logic
+                              </span>
+                              <div className="flex items-center gap-2">
+                                {(msg as any).threat_verdict && (
+                                  <Badge
+                                    variant={(msg as any).threat_verdict === 'MALICIOUS' ? 'destructive' : 'secondary'}
+                                    className="text-[9px] font-black px-2 py-0 h-4 rounded-sm"
+                                  >
+                                    {(msg as any).threat_verdict}
+                                  </Badge>
+                                )}
+                                <Badge variant="outline" className="text-[9px] font-black border-rose-200 text-rose-700 bg-white h-4 rounded-sm">
+                                  {msg.analysis.severity?.toUpperCase() || 'UNKNOWN'}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="space-y-1.5 pt-1">
+                              <p className="text-xs text-foreground/90 leading-normal font-medium"><strong>Category:</strong> {msg.analysis.ui_labels?.category || '—'}</p>
+                              <p className="text-xs text-muted-foreground leading-normal">{msg.analysis.detection_summary}</p>
+                              <div className="p-3 bg-card border border-rose-500/20 rounded-lg shadow-sm">
+                                <p className="text-xs text-rose-600 dark:text-rose-400 font-bold">Recommended: {msg.analysis.user_alert}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ML Mathematical Evidence Panel */}
+                          {(msg as any).ml_analysis && (
+                            <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-4">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">ML Inference Data</span>
+                                <Badge variant="outline" className="text-[9px] border-border text-muted-foreground bg-card h-4 uppercase">Verified</Badge>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">Active Model</p>
+                                  <p className="text-xs font-black text-foreground italic">{(msg as any).ml_analysis.model_used}</p>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight">Prediction</p>
+                                  <p className={`text-xs font-black ${(msg as any).ml_analysis.prediction === 'benign' || (msg as any).ml_analysis.prediction === 'legitimate' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                    {((msg as any).ml_analysis.prediction || 'N/A').toUpperCase()}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Probability and Risk */}
+                              {(msg as any).ml_analysis.threat_probability !== undefined && (
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-end">
+                                    <span className="text-[10px] text-muted-foreground font-bold uppercase">Confidence Level</span>
+                                    <span className="text-sm font-black font-mono text-foreground">
+                                      {(((msg as any).ml_analysis.threat_probability || 0) * 100).toFixed(1)}%
+                                    </span>
+                                  </div>
+                                  <div className="w-full bg-border rounded-full h-1 overflow-hidden">
+                                    <div
+                                      className="h-full bg-primary transition-all duration-1000"
+                                      style={{ width: `${Math.round(((msg as any).ml_analysis.threat_probability || 0) * 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {(msg as any).risk_score !== undefined && (
+                                <div className="flex items-center justify-between py-2 border-t border-border">
+                                  <span className="text-[10px] text-muted-foreground font-bold uppercase italic">Synthesized Risk Score</span>
+                                  <div className="flex items-baseline gap-0.5">
+                                    <span className="text-xl font-black text-foreground leading-none">{(msg as any).risk_score}</span>
+                                    <span className="text-[10px] text-muted-foreground font-bold">/10</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Action Button */}
+                          <Button
+                            size="default"
+                            className="w-full bg-slate-900 hover:bg-black text-white font-black rounded-xl shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] gap-3 uppercase tracking-wider text-xs h-11"
+                            onClick={handleProceedToComplaint}
+                          >
+                            <ClipboardList className="h-4 w-4" />
+                            Initialize Auto-Complaint
+                            <ChevronRight className="h-4 w-4 ml-auto opacity-50" />
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* General Question Tools */}
+                      {msg.role === 'assistant' && msg.intent === 'general_question' && (
+                        <div className="mt-5 space-y-3 pt-5 border-t border-border">
+                          {msg.related_playbook_id && msg.related_playbook_id !== 'null' && (
+                            <button
+                              onClick={() => {
+                                router.push(`/user-dashboard/playbook?highlight=${msg.related_playbook_id}`);
+                              }}
+                              className="w-full flex items-center gap-4 p-4 rounded-2xl text-sm font-black transition-all bg-card border border-border hover:border-primary hover:shadow-md active:scale-[0.98] group"
+                            >
+                              <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center text-muted-foreground group-hover:text-primary transition-colors">
+                                <BookOpen className="h-5 w-5" />
+                              </div>
+                              <span className="flex-1 text-left text-foreground/80">
+                                {PLAYBOOK_LABELS[msg.related_playbook_id] || 'Explore Security Playbook'}
+                              </span>
+                              <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-primary group-hover:translate-x-1 transition-all" />
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleSpeak(`msg-${msg.id}`, msg.content)}
+                            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                              speakingId === `msg-${msg.id}`
+                                ? 'bg-primary/5 border-primary text-primary animate-pulse'
+                                : 'bg-muted border-border text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                            }`}
+                          >
+                            {speakingId === `msg-${msg.id}` ? (
+                              <><VolumeX className="h-3.5 w-3.5" /> Stop Narration</>
+                            ) : (
+                              <><Volume2 className="h-3.5 w-3.5" /> Native Voice Replay</>
+                            )}
+                          </button>
                         </div>
                       )}
                     </div>
-                    {/* Threat detected: show rich card + ML evidence + Auto File Complaint button */}
-                    {msg.role === 'assistant' && (msg.intent === 'analyze_threat' || msg.intent === 'complaint_ready') && msg.analysis && (
-                      <div className="mt-3 space-y-3">
-                        {/* ── Verdict Header ── */}
-                        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">⚠ Threat Detected</span>
-                            <div className="flex items-center gap-1.5">
-                              {(msg as any).threat_verdict && (
-                                <Badge
-                                  variant={(msg as any).threat_verdict === 'MALICIOUS' ? 'destructive' : 'default'}
-                                  className="text-xs font-bold"
-                                >
-                                  {(msg as any).threat_verdict}
-                                </Badge>
-                              )}
-                              <Badge variant={msg.analysis.severity?.toLowerCase() === 'critical' || msg.analysis.severity?.toLowerCase() === 'high' ? 'destructive' : 'default'} className="text-xs">
-                                {msg.analysis.severity || 'Unknown'}
-                              </Badge>
-                            </div>
-                          </div>
-                          <p className="text-xs text-foreground/80"><strong>Category:</strong> {msg.analysis.ui_labels?.category || '—'}</p>
-                          <p className="text-xs text-foreground/80"><strong>Summary:</strong> {msg.analysis.detection_summary}</p>
-                          <p className="text-xs text-amber-300"><strong>Action:</strong> {msg.analysis.user_alert}</p>
-                          {(msg as any).incident_id && (
-                            <p className="text-xs text-muted-foreground font-mono">🔖 Incident: {(msg as any).incident_id}</p>
-                          )}
-                        </div>
-
-                        {/* ── ML Mathematical Evidence ── */}
-                        {(msg as any).ml_analysis && (
-                          <div className="rounded-lg border border-blue-500/40 bg-blue-500/10 p-3 space-y-2">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-semibold text-blue-400 uppercase tracking-wide">🎯 ML Mathematical Evidence</span>
-                              {(msg as any).ml_analysis.ml_available ? (
-                                <Badge variant="outline" className="text-xs border-blue-500/50 text-blue-400">Model Active</Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-xs border-yellow-500/50 text-yellow-400">LLM-Only</Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-foreground/80">
-                              <strong>Model:</strong> {(msg as any).ml_analysis.model_used}
-                            </p>
-                            <p className="text-xs text-foreground/80">
-                              <strong>Prediction:</strong>{' '}
-                              <span className={`font-semibold ${(msg as any).ml_analysis.prediction === 'benign' || (msg as any).ml_analysis.prediction === 'legitimate' ? 'text-green-400' : 'text-red-400'}`}>
-                                {((msg as any).ml_analysis.prediction || 'N/A').toUpperCase()}
-                              </span>
-                            </p>
-                            {/* Threat Probability Bar */}
-                            {(msg as any).ml_analysis.threat_probability !== undefined && (
-                              <div className="space-y-1">
-                                <div className="flex justify-between text-xs text-foreground/70">
-                                  <span><strong>Threat Probability</strong></span>
-                                  <span className="font-mono font-bold">
-                                    {(((msg as any).ml_analysis.threat_probability || 0) * 100).toFixed(1)}%
-                                  </span>
-                                </div>
-                                <div className="w-full bg-slate-700 rounded-full h-2">
-                                  <div
-                                    className={`h-2 rounded-full transition-all ${
-                                      ((msg as any).ml_analysis.threat_probability || 0) > 0.7
-                                        ? 'bg-red-500'
-                                        : ((msg as any).ml_analysis.threat_probability || 0) > 0.4
-                                        ? 'bg-yellow-500'
-                                        : 'bg-green-500'
-                                    }`}
-                                    style={{ width: `${Math.round(((msg as any).ml_analysis.threat_probability || 0) * 100)}%` }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                            {/* Risk Score */}
-                            {(msg as any).risk_score !== undefined && (
-                              <div className="flex items-center justify-between pt-1 border-t border-blue-500/20">
-                                <span className="text-xs text-foreground/70"><strong>Risk Score</strong></span>
-                                <span className={`text-sm font-bold font-mono ${
-                                  (msg as any).risk_score > 7 ? 'text-red-400'
-                                  : (msg as any).risk_score > 4 ? 'text-yellow-400'
-                                  : 'text-green-400'
-                                }`}>
-                                  {(msg as any).risk_score}/10
-                                </span>
-                              </div>
-                            )}
-                            <div className="flex justify-between text-xs text-foreground/60 pt-1">
-                              <span>Accuracy: {(msg as any).ml_analysis.model_accuracy}</span>
-                              {(msg as any).ml_analysis.model_roc_auc !== 'N/A' && (
-                                <span>ROC-AUC: {(msg as any).ml_analysis.model_roc_auc}</span>
-                              )}
-                            </div>
-                            {(msg as any).ml_analysis.ml_note && (
-                              <p className="text-xs text-yellow-400/80 italic">{(msg as any).ml_analysis.ml_note}</p>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Auto File Complaint Button */}
-                        <Button
-                          size="sm"
-                          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-2 cyber-glow"
-                          onClick={handleProceedToComplaint}
-                        >
-                          <ClipboardList className="h-4 w-4" />
-                          🚀 Auto File Complaint
-                          <ChevronRight className="h-4 w-4 ml-auto" />
-                        </Button>
-                        <p className="text-xs text-muted-foreground text-center">All fields will be pre-filled — just review and submit</p>
-                      </div>
-                    )}
-
-                    {/* ── Agentic: Playbook Button + Read Aloud for general_question ── */}
-                    {msg.role === 'assistant' && msg.intent === 'general_question' && (
-                      <div className="mt-3 space-y-2">
-                        {/* Read Aloud Button */}
-                        <button
-                          onClick={() => handleSpeak(`msg-${msg.id}`, msg.content)}
-                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 border ${
-                            speakingId === `msg-${msg.id}`
-                              ? 'bg-purple-100 border-purple-300 text-purple-700 animate-pulse'
-                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-600'
-                          }`}
-                        >
-                          {speakingId === `msg-${msg.id}` ? (
-                            <><VolumeX className="h-3.5 w-3.5" /> Stop Reading</>
-                          ) : (
-                            <><Volume2 className="h-3.5 w-3.5" /> 🔊 Read Aloud</>
-                          )}
-                        </button>
-
-                        {/* Playbook Navigation Button */}
-                        {msg.related_playbook_id && msg.related_playbook_id !== 'null' && (
-                          <button
-                            onClick={() => {
-                              // Play a short alert sound
-                              const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                              const osc = ctx.createOscillator();
-                              const gain = ctx.createGain();
-                              osc.connect(gain);
-                              gain.connect(ctx.destination);
-                              osc.frequency.value = 880;
-                              osc.type = 'sine';
-                              gain.gain.value = 0.15;
-                              osc.start();
-                              gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-                              osc.stop(ctx.currentTime + 0.3);
-                              // Navigate to playbook
-                              router.push(`/user-dashboard/playbook?highlight=${msg.related_playbook_id}`);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.98] group"
-                          >
-                            <BookOpen className="h-4 w-4 group-hover:animate-bounce" />
-                            <span className="flex-1 text-left">
-                              {PLAYBOOK_LABELS[msg.related_playbook_id] || '📋 View Security Playbook'}
-                            </span>
-                            <ChevronRight className="h-4 w-4 opacity-60 group-hover:translate-x-1 transition-transform" />
-                          </button>
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
               ))}
 
               {isAiTyping && (
                 <div className="flex justify-start">
-                  <div className="bg-muted text-muted-foreground p-3 rounded-lg border border-primary/20 shadow-sm shadow-primary/5">
-                    <div className="flex items-center space-x-3">
-                      <div className="relative h-5 w-5">
+                  <div className="bg-card text-foreground p-4 rounded-2xl rounded-tl-none border border-border shadow-sm">
+                    <div className="flex items-center space-x-4">
+                      <div className="relative h-6 w-6">
                         <div className="absolute inset-0 animate-ping rounded-full bg-primary/20 opacity-75"></div>
-                        <div className="relative animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
+                        <div className="relative animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full shadow-[0_0_10px_rgba(59,130,246,0.3)]"></div>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-foreground tracking-tight">Sudarshan Chakra AI</span>
-                        <span className="text-[10px] text-muted-foreground font-mono animate-pulse">{agentStatus}</span>
+                        <span className="text-xs font-black text-foreground tracking-tight uppercase">Agent Synchronization</span>
+                        <span className="text-[10px] text-muted-foreground font-bold font-mono animate-pulse">{agentStatus}</span>
                       </div>
                     </div>
                   </div>
@@ -639,55 +733,91 @@ export default function UserDashboard() {
               )}
             </div>
 
-            {/* Attachment Preview Bar */}
-            {attachment && (
-              <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                <span className="text-base">{getFileIcon(getFileType(attachment))}</span>
-                <span className="text-sm font-medium text-blue-800 truncate flex-1">{attachment.name}</span>
-                <span className="text-xs text-blue-500">{(attachment.size / 1024).toFixed(0)} KB</span>
-                <button
-                  onClick={handleRemoveAttachment}
-                  className="p-0.5 rounded-full hover:bg-blue-200 transition-colors"
-                >
-                  <X className="h-3.5 w-3.5 text-blue-600" />
-                </button>
-              </div>
-            )}
-
-            {/* Input Area */}
-            <div className="relative">
-              <div className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg shadow-sm">
-              <div className="flex-1 relative">
-                <Input
-                  placeholder="Describe your cybersecurity issue..."
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage(message)}
-                  className="pr-10 bg-white border-slate-300 focus-visible:border-primary focus-visible:ring-primary/20"
-                />
-                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                  <input
-                    type="file"
-                    id="file-upload"
-                    className="hidden"
-                    onChange={handleAttachmentChange}
-                    accept="image/*,.pdf,.docx,.doc,.exe,.dll,.bat,.cmd,.msi,.apk,.sh,.jar,.ps1,.vbs,.scr,.txt,.csv,.log,.json,.xml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/x-msdownload,application/octet-stream"
-                  />
-                  <label htmlFor="file-upload">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-200" asChild>
-                      <Paperclip className="h-4 w-4 text-slate-600" />
-                    </Button>
-                  </label>
+            {/* Input & Multimedia Control Center */}
+            <div className="p-6 bg-card border-t border-border">
+              {attachment && (
+                <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-muted/50 border border-border rounded-2xl animate-in slide-in-from-bottom-2">
+                  <span className="text-xl flex-shrink-0">{getFileIcon(getFileType(attachment))}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-foreground truncate">{attachment.name}</p>
+                    <p className="text-[10px] text-muted-foreground font-bold">{(attachment.size / 1024).toFixed(0)} KB • READ TO ANALYZE</p>
+                  </div>
+                  <button
+                    onClick={handleRemoveAttachment}
+                    className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-rose-50 hover:text-rose-600 transition-all group"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
+              )}
+
+              <div className="flex items-end gap-3">
+                <div className="flex-1 relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-blue-600 rounded-2xl blur opacity-0 group-focus-within:opacity-10 transition duration-500"></div>
+                  <div className="relative flex items-center bg-muted/50 border border-border rounded-2xl transition-all focus-within:bg-card focus-within:border-primary focus-within:shadow-[0_4px_20px_rgba(59,130,246,0.08)]">
+                    <div className="flex-1 relative">
+                      <Textarea
+                        placeholder={isRecording ? "Listening to your concern..." : isFilingComplaint ? "Provide more details for the incident report..." : "Describe your cybersecurity concern..."}
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage(message);
+                          }
+                        }}
+                        className="min-h-[52px] max-h-[250px] py-4 px-5 pr-12 resize-none bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 scrollbar-hide text-sm font-medium text-foreground placeholder:text-muted-foreground"
+                      />
+                    </div>
+                    <div className="absolute right-2 bottom-2 flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={toggleRecording}
+                        className={`h-9 w-9 rounded-xl transition-all ${
+                          isRecording 
+                            ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 animate-pulse shadow-[0_0_12px_rgba(225,29,72,0.2)]' 
+                            : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                        }`}
+                        title={isRecording ? "Stop Listening" : "Start Voice Input"}
+                      >
+                        {isRecording ? <Mic className="h-4 w-4" /> : <Mic className="h-4 w-4 opacity-70" />}
+                      </Button>
+                      <input
+                        type="file"
+                        id="file-upload"
+                        className="hidden"
+                        onChange={handleAttachmentChange}
+                        accept="image/*,.pdf,.docx,.doc,.exe,.dll,.bat,.cmd,.msi,.apk,.sh,.jar,.ps1,.vbs,.scr,.txt,.csv,.log,.json,.xml"
+                      />
+                      <label htmlFor="file-upload" className="cursor-pointer group/label">
+                        <div className="h-9 w-9 rounded-xl flex items-center justify-center hover:bg-muted text-muted-foreground group-hover/label:text-foreground transition-all">
+                          <Paperclip className="h-4 w-4" />
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <Button 
+                  onClick={() => handleSendMessage(message)} 
+                  disabled={!message.trim() && !attachment || isAiTyping}
+                  className={`h-[54px] w-[54px] rounded-2xl shadow-lg transition-all duration-300 ${
+                    message.trim() || attachment 
+                      ? 'bg-slate-900 hover:bg-black text-white translate-y-0 scale-100 shadow-slate-200' 
+                      : 'bg-slate-100 text-slate-300 translate-y-1 scale-95 shadow-none'
+                  }`}
+                >
+                  <Send className={`h-5 w-5 transition-transform ${message.trim() || attachment ? 'rotate-0' : '-rotate-45 opacity-50'}`} />
+                </Button>
               </div>
-              <Button 
-                onClick={() => handleSendMessage(message)} 
-                disabled={!message.trim() && !attachment || isAiTyping}
-                className="shrink-0"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
+              <div className="mt-4 flex items-center justify-center gap-6 opacity-40">
+                <div className="flex items-center gap-1.5 grayscale">
+                  <Image src="/model logo.png" alt="Sudarshan" width={14} height={14} />
+                  <span className="text-[8px] font-black uppercase tracking-[0.3em]">CHAKRA CORE-V2</span>
+                </div>
+                <span className="h-1 w-1 rounded-full bg-slate-800"></span>
+                <span className="text-[8px] font-black uppercase tracking-[0.3em]">END-TO-END VERIFIED</span>
+              </div>
             </div>
           </CardContent>
         </Card>

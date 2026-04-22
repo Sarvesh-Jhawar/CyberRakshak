@@ -15,6 +15,59 @@ Instead of requiring security teams to manually parse malicious files, URLs, or 
 
 ---
 
+## 🚀 Quick Start Guide
+
+Follow these steps to get the project running on your local machine.
+
+### 1️⃣ Prerequisites
+Ensure you have the following installed:
+- **Python 3.9+** ([Download here](https://www.python.org/downloads/))
+- **Node.js 18+** ([Download here](https://nodejs.org/))
+- **PostgreSQL** ([Download here](https://www.postgresql.org/download/))
+
+### 2️⃣ Configuration & Setup
+Before running, you need to set up your environment:
+
+1.  **Database**: Create a PostgreSQL database named `cyberrakshak`.
+2.  **Firebase**: 
+    - Download your `serviceAccountKey.json` from the Firebase Console.
+    - Place it in the `Backend/` folder.
+3.  **Environment Variables**:
+    - Copy `Backend/env.example` to `Backend/.env`.
+    - Add your `GROQ_API_KEY` and update the `DATABASE_URL` if necessary.
+
+### 3️⃣ Running the Project (Easy Way)
+We have provided a one-click launcher for Windows users:
+1.  Open the project folder.
+2.  Double-click **`run_project.bat`**.
+3.  The script will automatically install dependencies and start the Backend, ML API, and Frontend.
+
+### 4️⃣ Manual Execution (Standard Way)
+If you prefer to run components manually, open three terminal windows:
+
+**Terminal 1: ML Model API**
+```bash
+cd models
+pip install -r requirements.txt
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8001
+```
+
+**Terminal 2: Main Backend**
+```bash
+cd Backend
+pip install -r requirements.txt
+python run.py
+```
+
+**Terminal 3: Frontend**
+```bash
+cd Frontend
+npm install
+npm run dev
+```
+
+---
+
 ## ⚙️ How It Works (Core Architecture)
 
 CyberRakshak operates on a high-speed, dual-engine "Router-to-Synthesizer" architecture:
