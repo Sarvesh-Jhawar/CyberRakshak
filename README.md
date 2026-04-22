@@ -24,9 +24,21 @@ Instead of requiring security teams to manually parse malicious files, URLs, or 
 3.  **Configure Environment**: 
     - Copy `Backend/env.example` to `Backend/.env`.
     - Update `DATABASE_URL` with your local PostgreSQL credentials and add your `GROQ_API_KEY`.
-4.  **Launch**: Double-click **`run_project.bat`** in the main folder.
+4.  **Launch**: Double-click **`executable_file.bat`** in the main folder.
 
 *Note: The first run will automatically install all dependencies, so it may take a few minutes.*
+
+---
+
+## 📁 Project Structure & Documentation
+
+For more detailed information on specific components, refer to their dedicated documentation:
+
+- **[Backend Documentation](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/Backend/README.md)**: API architecture, database schema, and security protocols.
+- **[Frontend Documentation](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/Frontend/README.md)**: UI components, dashboard design, and state management.
+- **[Machine Learning Documentation](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/models/README.md)**: Model training details, datasets, and performance metrics.
+- **[LLM Orchestration Layer](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/llm/README.md)**: Logic for AI-agent routing and incident synthesis.
+- **[Technical Journey](file:///c:/Users/sarve/Downloads/CyberRakshak-v.1.0/DEVELOPMENT_JOURNEY.md)**: A stepwise procedure of how the project was built.
 
 ---
 
