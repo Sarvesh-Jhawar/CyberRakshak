@@ -481,11 +481,14 @@ PAYLOAD_BUILDERS = {
 ROUTER_SYSTEM_PROMPT = """
 You are CyberRakshak's routing engine. Analyze the user message and conversation history.
 
-Your job: Classify the message into one of two primary categories:
+Your job: Classify the message into one of THREE primary categories:
 1. EDUCATIONAL/GENERAL QUESTION: The user is asking for definitions, explanations, or general knowledge (e.g., "tell me about phishing", "what is ransomware", "how does a DDoS attack work?"). 
    -> ROUTE TO: "general_question"
 
-2. THREAT REPORT/ANALYSIS: The user is describing a specific incident they are currently experiencing, or asking to analyze a specific URL, file, or suspicious activity (e.g., "I got a suspicious email", "can you check this link?", "my files are encrypted").
+2. SAFE/BENIGN INPUT: The user is asking to analyze an email, URL, or file, but it is COMPLETELY NORMAL and SAFE (e.g., standard internal company meeting invites, normal Google URLs, official software installers). There are no suspicious indicators.
+   -> ROUTE TO: "safe_benign"
+
+3. THREAT REPORT/ANALYSIS: The user is describing a potentially suspicious incident, URL, file, or activity that needs ML analysis.
    -> ROUTE TO: phishing|malware|ransomware|networking|zero-day
 
 ROUTING RULES:
@@ -494,7 +497,8 @@ ROUTING RULES:
 - "ransomware": Analyzing a live ransomware incident (encrypted files, ransom notes).
 - "networking": Analyzing specific network traffic anomalies or DDoS attacks currently happening.
 - "zero-day": Unknown or novel attack patterns requiring deep behavioral analysis.
-- "general_question": EDUCATIONAL queries. Any question asking "What is X?", "Tell me about X", "How to prevent X?" where NO specific incident is being reported.
+- "general_question": EDUCATIONAL queries. Any question asking "What is X?".
+- "safe_benign": Completely normal, safe inputs that do not need ML threat analysis.
 
 EXTRACT PARAMETERS ONLY IF IT'S A THREAT REPORT:
 - For phishing: url, domain_name, subject, body, sender_email, brand_spoofed, urgency_language
@@ -508,12 +512,12 @@ If the user says "no", "I don't have it", "skip", or declines, set "missing_requ
 
 Return ONLY valid JSON:
 {
-  "threat_type": "phishing|malware|ransomware|networking|zero-day|general_question",
+  "threat_type": "phishing|malware|ransomware|networking|zero-day|general_question|safe_benign",
   "extracted_params": { ... },
   "missing_required_params": [ ... ],
   "user_declined_params": false,
   "confidence_routing": "high|medium|low",
-  "routing_reason": "Briefly explain if this was an educational question or a threat report"
+  "routing_reason": "Briefly explain if this was an educational question, safe input, or threat report"
 }
 """
 
@@ -521,6 +525,17 @@ Return ONLY valid JSON:
 CONTEXTUAL_ANALYSIS_PROMPT = """
 You are CyberRakshak's threat intelligence engine (Sudarshan Chakra AI).
 You perform deep contextual analysis on the described threat.
+
+IMPORTANT SAFEGUARD RULE:
+Users will often submit normal, benign, and perfectly safe inputs (e.g., standard internal company emails like "team lunch", normal Google search URLs, safe downloads like "VLC installer from videolan.org", or normal network traffic).
+The ML model might incorrectly flag them as malicious due to missing features or false positives. YOU ARE THE FINAL JUDGE.
+If the input describes a completely normal, safe, and benign scenario with NO suspicious urgency, NO suspicious links, and NO requests for sensitive info, you MUST OVERRIDE the ML model.
+In these safe cases:
+- Set "threat_verdict" to "BENIGN"
+- Set "severity" to "Low"
+- Set "detection_summary" to state "No threat detected. This appears to be safe/benign."
+- Set "user_alert" to "No action required. Safe to proceed."
+- Provide a very low "risk_score" (e.g., 0.1 to 1.0).
 
 Given the user's threat description and the ML model result, generate a FULL threat report.
 
@@ -611,8 +626,11 @@ def synthesize_confidence(ml_result: Optional[Dict], llm_verdict: str, llm_sever
 
     ensemble = (ml_score * 0.6) + (llm_score * 0.4)
 
-    # Verdict logic
-    if ml_is_malicious and llm_is_malicious:
+    # Verdict logic: If LLM is highly confident it is BENIGN, it acts as an override for ML false positives
+    if llm_verdict == "BENIGN":
+        verdict = "BENIGN"
+        confidence = "LOW"
+    elif ml_is_malicious and llm_is_malicious:
         verdict = "MALICIOUS"
         confidence = "CRITICAL" if ensemble > 0.8 else "HIGH"
     elif ml_is_malicious or llm_is_malicious:
@@ -777,6 +795,45 @@ async def analyze_input(
         ]
         return await call_groq(
             general_prompt, json_mode=True,
+            image_base64=image_base64, image_media_type=image_media_type
+        )
+
+    # Safe/Benign fast path — bypass ML models
+    if threat_type == "safe_benign":
+        safe_prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You are Sudarshan Chakra, CyberRakshak's cybersecurity AI assistant. "
+                    "The user has submitted an input (email, URL, file description) that is completely safe and benign. "
+                    "Generate a threat analysis report confirming that this is safe, explaining briefly why it is normal. "
+                    "Return ONLY valid JSON matching this EXACT structure:\n"
+                    "{\n"
+                    "  \"intent\": \"analyze_threat\",\n"
+                    "  \"detection_summary\": \"No threat detected. This appears to be completely safe/benign.\",\n"
+                    "  \"user_alert\": \"No action required. Safe to proceed.\",\n"
+                    "  \"severity\": \"Low\",\n"
+                    "  \"cert_alert\": \"N/A\",\n"
+                    "  \"playbook\": [],\n"
+                    "  \"evidence_to_collect\": [],\n"
+                    "  \"technical_details\": {\"indicators\": [], \"analysis\": \"Explain briefly why this input is safe (e.g. normal internal email, official domain).\"},\n"
+                    "  \"ui_labels\": {\"category\": \"phishing\", \"status\": \"Safe\", \"recommended_action\": \"No action needed\"},\n"
+                    "  \"summary\": {\"title\": \"Benign Input Detected\", \"category\": \"phishing\", \"description\": \"Input is safe.\", \"evidenceType\": \"file\", \"evidenceText\": \"\", \"evidenceUrl\": \"\"},\n"
+                    "  \"threat_verdict\": \"BENIGN\",\n"
+                    "  \"risk_score\": 0.5,\n"
+                    "  \"recommended_actions\": {\"immediate\": [], \"investigation\": [], \"prevention\": []},\n"
+                    "  \"reporting_protocol\": {\"agency\": \"N/A\", \"format\": \"N/A\", \"timeline\": \"N/A\", \"reference_id\": \"N/A\"},\n"
+                    "  \"known_parallels\": \"N/A\",\n"
+                    "  \"industry_impact\": \"N/A\",\n"
+                    "  \"ml_analysis\": {\"model_used\": \"LLM Context Engine (Bypass)\", \"prediction\": \"benign\", \"threat_probability\": 0.01}\n"
+                    "}"
+                )
+            },
+            *[{"role": m["role"], "content": str(m["content"])} for m in parsed_history[-4:]],
+            {"role": "user", "content": user_content}
+        ]
+        return await call_groq(
+            safe_prompt, json_mode=True,
             image_base64=image_base64, image_media_type=image_media_type
         )
 

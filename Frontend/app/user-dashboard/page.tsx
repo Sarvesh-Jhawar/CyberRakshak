@@ -295,7 +295,23 @@ export default function UserDashboard() {
   const handleProceedToComplaint = () => {
     if (!complaintData) return;
 
-    const queryParams = new URLSearchParams(complaintData);
+    const queryParams = new URLSearchParams(complaintData as any);
+    
+    // Find the latest user message with an attachment
+    const lastUserMessageWithAttachment = [...chatMessages].reverse().find(msg => msg.role === 'user' && msg.attachmentName);
+    
+    if (lastUserMessageWithAttachment) {
+      let evidenceType = "file";
+      if (lastUserMessageWithAttachment.attachmentType === "image") {
+        evidenceType = "image";
+      } else if (lastUserMessageWithAttachment.attachmentType === "pdf" || lastUserMessageWithAttachment.attachmentType === "docx") {
+        evidenceType = "file";
+      }
+      queryParams.append("evidenceType", evidenceType);
+      queryParams.append("fakedAttachmentName", lastUserMessageWithAttachment.attachmentName!);
+      queryParams.append("fakedAttachmentType", lastUserMessageWithAttachment.attachmentType || "file");
+    }
+
     router.push(`/user-dashboard/complaint?${queryParams.toString()}`);
   };
 
@@ -581,22 +597,22 @@ export default function UserDashboard() {
                       {msg.role === 'assistant' && (msg.intent === 'analyze_threat' || msg.intent === 'complaint_ready') && msg.analysis && (
                         <div className="mt-5 space-y-4 pt-5 border-t border-border">
                           {/* Threat Header */}
-                          <div className="rounded-xl border border-rose-500/20 bg-rose-50/10 dark:bg-rose-950/20 p-4 space-y-3">
+                          <div className={`rounded-xl border p-4 space-y-3 ${(msg as any).threat_verdict === 'BENIGN' ? 'border-emerald-500/20 bg-emerald-50/10 dark:bg-emerald-950/20' : 'border-rose-500/20 bg-rose-50/10 dark:bg-rose-950/20'}`}>
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] flex items-center gap-2">
-                                <AlertTriangle className="h-3 w-3" />
-                                Threat Logic
+                              <span className={`text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-2 ${(msg as any).threat_verdict === 'BENIGN' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {(msg as any).threat_verdict === 'BENIGN' ? <Shield className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                                {(msg as any).threat_verdict === 'BENIGN' ? 'Safety Logic' : 'Threat Logic'}
                               </span>
                               <div className="flex items-center gap-2">
                                 {(msg as any).threat_verdict && (
                                   <Badge
-                                    variant={(msg as any).threat_verdict === 'MALICIOUS' ? 'destructive' : 'secondary'}
-                                    className="text-[9px] font-black px-2 py-0 h-4 rounded-sm"
+                                    variant={(msg as any).threat_verdict === 'MALICIOUS' ? 'destructive' : (msg as any).threat_verdict === 'BENIGN' ? 'outline' : 'secondary'}
+                                    className={`text-[9px] font-black px-2 py-0 h-4 rounded-sm ${(msg as any).threat_verdict === 'BENIGN' ? 'border-emerald-500 text-emerald-600' : ''}`}
                                   >
                                     {(msg as any).threat_verdict}
                                   </Badge>
                                 )}
-                                <Badge variant="outline" className="text-[9px] font-black border-rose-200 text-rose-700 bg-white h-4 rounded-sm">
+                                <Badge variant="outline" className={`text-[9px] font-black bg-white h-4 rounded-sm ${(msg as any).threat_verdict === 'BENIGN' ? 'border-emerald-200 text-emerald-700' : 'border-rose-200 text-rose-700'}`}>
                                   {msg.analysis.severity?.toUpperCase() || 'UNKNOWN'}
                                 </Badge>
                               </div>
@@ -604,8 +620,8 @@ export default function UserDashboard() {
                             <div className="space-y-1.5 pt-1">
                               <p className="text-xs text-foreground/90 leading-normal font-medium"><strong>Category:</strong> {msg.analysis.ui_labels?.category || '—'}</p>
                               <p className="text-xs text-muted-foreground leading-normal">{msg.analysis.detection_summary}</p>
-                              <div className="p-3 bg-card border border-rose-500/20 rounded-lg shadow-sm">
-                                <p className="text-xs text-rose-600 dark:text-rose-400 font-bold">Recommended: {msg.analysis.user_alert}</p>
+                              <div className={`p-3 bg-card border rounded-lg shadow-sm ${(msg as any).threat_verdict === 'BENIGN' ? 'border-emerald-500/20' : 'border-rose-500/20'}`}>
+                                <p className={`text-xs font-bold ${(msg as any).threat_verdict === 'BENIGN' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>Recommended: {msg.analysis.user_alert}</p>
                               </div>
                             </div>
                           </div>

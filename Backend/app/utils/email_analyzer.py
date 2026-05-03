@@ -60,6 +60,14 @@ class EmailAnalyzer:
             # Get LLM contextual analysis
             llm_analysis = await self._get_llm_analysis(email_data, ml_result)
             
+            # LLM Override Logic for False Positives
+            llm_verdict = llm_analysis.get("threat_verdict", "UNKNOWN")
+            if llm_verdict == "BENIGN":
+                threat_level = "safe"
+                phishing_score = min(phishing_score, 15.0)  # Cap at safe level
+            elif llm_verdict == "MALICIOUS" and threat_level == "safe":
+                threat_level = "suspicious"  # LLM caught something ML missed
+            
             # Combine ML and LLM analysis
             combined_analysis = {
                 "ml_analysis": self._format_ml_analysis(ml_result, threat_level),
@@ -267,6 +275,13 @@ class EmailAnalyzer:
             # Create analysis prompt
             analysis_prompt = f"""
 Analyze this email for security threats. Provide a detailed assessment.
+
+IMPORTANT SAFEGUARD RULE:
+Many emails are completely normal corporate communication, newsletters, or promotional marketing spam, NOT malicious attacks.
+Carefully check the 'From' email ID and the branding. 
+If the email is from a legitimate domain, or if it is just a standard notification, meeting invite, or promotional message with NO malicious intent, you MUST classify it as BENIGN.
+Do not classify standard spam, subscriptions, or marketing emails as MALICIOUS or SUSPICIOUS. Only classify as a threat if there are clear indicators of phishing (e.g., domain spoofing, suspicious links, requests for credentials).
+If you determine it is safe or just promotional, set "threat_verdict" to "BENIGN" and "severity" to "Low".
 
 EMAIL DETAILS:
 Subject: {subject}

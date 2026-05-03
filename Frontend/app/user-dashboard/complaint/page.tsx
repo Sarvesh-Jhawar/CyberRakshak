@@ -37,6 +37,8 @@ export default function ComplaintPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [submittedIncidentId, setSubmittedIncidentId] = useState<string>("")
+  const [fakedAttachment, setFakedAttachment] = useState<{name: string, type: string} | null>(null)
+  const [isAttachmentAnimating, setIsAttachmentAnimating] = useState(false)
   const router = useRouter()
 
   const categories = [
@@ -101,14 +103,32 @@ export default function ComplaintPage() {
     const evidenceType = searchParams.get("evidenceType") || ""
     const evidenceText = searchParams.get("evidenceText") || ""
     const evidenceUrl = searchParams.get("evidenceUrl") || ""
+    const fakedName = searchParams.get("fakedAttachmentName")
+    const fakedType = searchParams.get("fakedAttachmentType")
 
-    if (title || category || description || evidenceType || evidenceText || evidenceUrl) {
+    if (fakedName) {
+      setFakedAttachment({ name: fakedName, type: fakedType || "file" })
+    }
+
+    if (title || category || description || evidenceType || evidenceText || evidenceUrl || fakedName) {
       setIsAnimating(true)
+      if (fakedName) {
+        setIsAttachmentAnimating(true)
+      }
       const animateSequence = async () => {
         if (title) await animateField("title", title, 500)
         if (category) await animateField("category", category, 300)
         if (description) await animateField("description", description, 300)
         if (evidenceType) await animateField("evidenceType", evidenceType, 300)
+        
+        if (fakedName) {
+          setCurrentField("attachment")
+          // Spinner is already showing; wait 1.5s to simulate the upload delay
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+          setIsAttachmentAnimating(false)
+          setCurrentField(null)
+        }
+
         if (evidenceText) await animateField("evidenceText", evidenceText, 300)
         if (evidenceUrl) await animateField("evidenceUrl", evidenceUrl, 300)
         
@@ -351,7 +371,7 @@ export default function ComplaintPage() {
                     (isAnimating ? animatedData.evidenceType : formData.evidenceType) === "video" ||
                     (isAnimating ? animatedData.evidenceType : formData.evidenceType) === "audio" ||
                     (isAnimating ? animatedData.evidenceType : formData.evidenceType) === "file") && (
-                    <div className="border-2 border-dashed border-border rounded-lg p-6">
+                    <div className={`border-2 border-dashed rounded-lg p-6 transition-all duration-300 ${currentField === "attachment" ? "border-primary bg-primary/5 ring-2 ring-primary ring-opacity-50" : "border-border"}`}>
                       <div className="text-center">
                         <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                         <Label htmlFor="fileUpload" className="cursor-pointer">
@@ -379,8 +399,8 @@ export default function ComplaintPage() {
                           {formData.evidenceType === "file" && "Any file type up to 50MB"}
                         </p>
                       </div>
-                      {file && (
-                        <div className="mt-4">
+                      {file ? (
+                        <div className="mt-4 p-3 bg-muted/50 rounded-lg">
                           <p className="text-sm font-medium mb-2">Selected file:</p>
                           <ul className="text-sm text-muted-foreground space-y-1">
                             <li className="flex items-center space-x-2">
@@ -390,7 +410,30 @@ export default function ComplaintPage() {
                             </li>
                           </ul>
                         </div>
-                      )}
+                      ) : fakedAttachment ? (
+                        <div className={`mt-4 p-3 rounded-lg border transition-all duration-500 ${isAttachmentAnimating ? 'bg-primary/10 border-primary/30 scale-95' : 'bg-primary/5 border-primary/20 scale-100'}`}>
+                          {isAttachmentAnimating ? (
+                            <div className="flex items-center justify-center space-x-3 py-2">
+                              <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full"></div>
+                              <span className="text-sm font-semibold text-primary animate-pulse">AI is attaching evidence...</span>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-sm font-medium text-foreground mb-2 flex items-center gap-2">
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                Auto-attached from Chat:
+                              </p>
+                              <ul className="text-sm space-y-1">
+                                <li className="flex items-center space-x-2 text-primary">
+                                  <FileText className="h-4 w-4" />
+                                  <span className="font-semibold">{fakedAttachment.name}</span>
+                                  <span className="text-xs opacity-70 bg-primary/10 px-2 py-0.5 rounded-full ml-2">Ready</span>
+                                </li>
+                              </ul>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
